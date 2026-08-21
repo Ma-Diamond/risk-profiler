@@ -1,0 +1,140 @@
+.qf-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.qf-progress__track {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.qf-progress__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 260ms var(--ease);
+}
+
+.qf-progress__label {
+  font-size: 12px;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.qf-card {
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 160px;
+  justify-content: center;
+  animation: fadeSlideUp 260ms var(--ease) both;
+}
+
+.qf-question-text {
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.qf-answer-input {
+  font-size: 17px;
+  padding: 13px 15px;
+  max-width: 340px;
+}
+
+.qf-option-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.qf-option {
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 120ms var(--ease);
+}
+
+.qf-option:hover {
+  border-color: var(--accent);
+}
+
+.qf-option.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.qf-yesno {
+  display: flex;
+  gap: 12px;
+}
+
+.qf-yesno__btn {
+  flex: 1;
+  max-width: 160px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 120ms var(--ease);
+}
+
+.qf-yesno__btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  color: var(--accent-ink);
+}
+
+.qf-yesno__btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.qf-likert {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 420px;
+}
+
+.qf-likert__value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  width: 20px;
+  text-align: center;
+}
+
+.qf-actions {
+  justify-content: space-between;
+}
+
+@media (max-width: 480px) {
+  .qf-card {
+    padding: 24px 18px;
+  }
+
+  .qf-question-text {
+    font-size: 18px;
+  }
+
+  .qf-yesno__btn {
+    max-width: none;
+  }
+}

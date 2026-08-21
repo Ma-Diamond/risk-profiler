@@ -1,0 +1,230 @@
+/* ============ STEP / CARD ENTRANCE ============ */
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.step-content--enter {
+  animation: fadeSlideUp 380ms var(--ease) both;
+}
+
+.card--pop-in {
+  animation: popIn 420ms var(--ease) both;
+}
+
+.card--stagger-in {
+  opacity: 0;
+  animation: fadeSlideUp 420ms var(--ease) both;
+}
+
+.step-subtitle--loading {
+  animation: pulseFade 1.6s ease-in-out infinite;
+}
+
+@keyframes pulseFade {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* ============ RISK LADDER FILL ============ */
+
+.risk-ladder__bar {
+  transition: opacity 420ms var(--ease), transform 420ms var(--ease);
+}
+
+.risk-ladder__bar.is-filled {
+  animation: ladderFill 420ms var(--ease) both;
+}
+
+@keyframes ladderFill {
+  from {
+    opacity: 0;
+    transform: scaleX(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.risk-ladder--vertical .risk-ladder__bar {
+  transform-origin: left center;
+}
+
+.risk-ladder--horizontal .risk-ladder__bar {
+  transform-origin: center;
+}
+
+/* ============ MODAL ============ */
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalPopIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 32, 30, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+  animation: overlayFadeIn 200ms var(--ease) both;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: modalPopIn 260ms var(--ease) both;
+}
+
+.modal-card__title {
+  font-size: 19px;
+}
+
+.modal-card__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-card__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.modal-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-card__hint {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 4px;
+}
+
+/* ============ TOAST ============ */
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: var(--accent-ink);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 8px 24px rgba(6, 61, 44, 0.3);
+  z-index: 200;
+  animation: toastSlideIn 260ms var(--ease) both;
+}
+
+.toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+}
+
+/* ============ INVEST BUTTON ============ */
+
+.btn-invest {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 11.5px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms var(--ease), color 140ms var(--ease), transform 120ms var(--ease);
+}
+
+.btn-invest:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-invest:active {
+  transform: scale(0.96);
+}
+
+/* ============ CHAT BUBBLE ENTRANCE ============ */
+
+.chat-bubble {
+  animation: fadeSlideUp 240ms var(--ease) both;
+}
+
+/* ============ RESPONSIVE ============ */
+
+@media (max-width: 480px) {
+  .modal-card__row {
+    grid-template-columns: 1fr;
+  }
+}

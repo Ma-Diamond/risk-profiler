@@ -1,0 +1,68 @@
+.risk-ladder--vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.risk-ladder--vertical .risk-ladder__segment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.risk-ladder--vertical .risk-ladder__bar {
+  height: 30px;
+  flex: 1;
+  border-radius: 6px;
+  position: relative;
+  transition: opacity 300ms var(--ease);
+}
+
+.risk-ladder--vertical .risk-ladder__label {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  width: 78px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.risk-ladder__bar.is-empty {
+  opacity: 0.12;
+}
+
+.risk-ladder__bar.is-filled {
+  opacity: 1;
+}
+
+.risk-ladder__marker {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 0 2px rgba(16, 32, 30, 0.35);
+}
+
+.risk-ladder--horizontal {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.risk-ladder--horizontal .risk-ladder__segment {
+  flex: 1;
+}
+
+.risk-ladder--horizontal .risk-ladder__bar {
+  height: 6px;
+  border-radius: 4px;
+  transition: opacity 300ms var(--ease);
+}
+
+.risk-ladder--horizontal .risk-ladder__label {
+  display: none;
+}
