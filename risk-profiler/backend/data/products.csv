@@ -1,0 +1,7 @@
+﻿key,name,provider,tax_wrapper,min_initial_investment,min_monthly_investment,annual_platform_fee_pct,advice_fee_pct,min_term_years,description,spec_notes
+cash_account,Flexible Cash Account,Example Platform,discretionary,500,250,0.25,0,0,No lock-in, near-instant access
+tfsa,Tax-Free Savings Account,Example Platform,tax_free_savings,0,500,0.3,0.5,0,All growth and withdrawals are tax-free, subject to annual/lifetime contribution limits.
+unit_trust,Example Unit Trust Account,Example Asset Managers,discretionary,10000,500,0.35,0.5,0,Direct discretionary access to a broad range of unit trust portfolios, no lock-in.
+retirement_annuity,Example Retirement Annuity,Example Life,retirement_annuity,0,750,0.45,0.75,15,Contributions are tax-deductible up to 27.5% of income (capped); proceeds locked in until retirement age.,Modelled as a flat 15-year minimum term as a stand-in for 'locked until age 55'.
+preservation_fund,Example Preservation Fund,Example Life,preservation_fund,20000,0,0.4,0.5,10,For transferred retirement fund proceeds; one full or partial pre-retirement withdrawal is allowed.,Lump-sum transfers only
+endowment,Example Endowment,Example Life,endowment,50000,1000,0.45,0.6,5,Tax is paid within the fund at a flat rate — useful for clients on a high marginal tax rate.,Tax paid inside the policy at the insurer's flat rate.

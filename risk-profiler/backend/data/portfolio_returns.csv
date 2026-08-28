@@ -1,0 +1,9 @@
+﻿portfolio_key,expected_return_pct,lower_return_pct,upper_return_pct,methodology
+capital_protector,7.5,6.5,8.5,
+stable_income,8.5,6,11,
+balanced_growth,9.5,5,14,
+managed_flexible,10,4,16,
+growth_equity,11.5,2.5,20,
+offshore_growth,12,1,22,
+aggressive_equity,13.5,-3,27,
+thematic_growth,14.5,-6,32,

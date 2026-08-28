@@ -1,67 +1,135 @@
-import { useState } from "react";
-import RiskLadder from "./RiskLadder";
-import QuickQuestions from "./QuickQuestions";
+import { useEffect, useRef, useState } from "react";
 import ChatPanel from "./ChatPanel";
-import ConfirmModal from "./ConfirmModal";
 import ResultsPanel from "./ResultsPanel";
+import SummaryModal from "./SummaryModal";
+import AuthForm from "./AuthForm";
+import ProfileHistory from "./ProfileHistory";
 import "./tokens.css";
 import "./global.css";
 import "./layout.css";
 import "./animations.css";
 
 const API_BASE = "http://localhost:8000";
-
-const INITIAL_PROFILE = {
-  full_name: "",
-  age: 30,
-  dependents: 0,
-  gross_monthly_income: 0,
-  monthly_expenses: 0,
-  emergency_fund_months: 3,
-  investment_horizon_years: 5,
-  investment_goal: "general_growth",
-  tolerance_questionnaire: [3, 3, 3, 3, 3],
-  knowledge_score: 3,
-  available_lump_sum: 0,
-  monthly_contribution: 500,
-};
-
-const STEPS = ["Profile", "Conversation", "Your matrix"];
+const TOKEN_STORAGE_KEY = "risk_profiler_token";
 
 export default function App() {
-  const [step, setStep] = useState(0);
-  const [quickProfile, setQuickProfile] = useState(INITIAL_PROFILE);
   const [sessionId, setSessionId] = useState(null);
-  const [extracted, setExtracted] = useState({});
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [result, setResult] = useState(null);
+  const [recalcMap, setRecalcMap] = useState({});
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [activeSummary, setActiveSummary] = useState(null);
+  const chatRef = useRef(null);
 
-  // Rough live estimate of tolerance band, purely for the ladder
-  // preview before the backend has computed anything server-side.
-  const previewTolerance = Math.min(
-    5,
-    Math.max(
-      1,
-      Math.ceil(
-        (quickProfile.tolerance_questionnaire.reduce((a, b) => a + b, 0) / 25) * 5
-      )
-    )
-  );
+  // "chat" is the normal app body (intake or docked results); the
+  // others replace it entirely while still leaving the chat mounted
+  // underneath (hidden via CSS, not unmounted) so an in-progress
+  // conversation isn't lost by a trip to My Profiles and back.
+  const [view, setView] = useState("chat"); // "chat" | "login" | "signup" | "history"
 
-  const handleConfirm = async (editedFields) => {
-    try {
-      await fetch(`${API_BASE}/chat/sessions/${sessionId}/extracted`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extracted: { ...extracted, ...editedFields } }),
-      });
-    } catch {
-      // If the save fails, we still move forward — /clients/profile will
-      // just fall back to whatever the session already had persisted.
+  const [authToken, setAuthToken] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // On load, validate any token we already have rather than trusting
+  // it blindly — it may have expired since it was stored.
+  useEffect(() => {
+    const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!stored) {
+      setAuthChecked(true);
+      return;
     }
-    setExtracted((e) => ({ ...e, ...editedFields }));
-    setShowConfirm(false);
-    setStep(2);
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${stored}` },
+        });
+        if (!res.ok) throw new Error("expired");
+        const user = await res.json();
+        setAuthToken(stored);
+        setCurrentUser(user);
+      } catch {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      } finally {
+        setAuthChecked(true);
+      }
+    })();
+  }, []);
+
+  const handleFinalized = (profileResult) => {
+    setResult(profileResult);
+    setRecalcMap({});
   };
+
+  const handleRecalculated = (list) => {
+    setRecalcMap((prev) => {
+      const next = { ...prev };
+      list.forEach((item) => {
+        next[`${item.product_id}-${item.portfolio_id}`] = {
+          expected_value: item.expected_value,
+          lower_value: item.lower_value,
+          upper_value: item.upper_value,
+        };
+      });
+      return next;
+    });
+    setSheetExpanded(true);
+  };
+
+  const handleSummaryConfirm = () => {
+    setActiveSummary(null);
+    chatRef.current?.sendProgrammaticMessage("Yes, that all looks right — please proceed.");
+  };
+
+  const handleAuthenticated = (token, user) => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    setAuthToken(token);
+    setCurrentUser(user);
+    setView("chat");
+    setResult(null);
+    setRecalcMap({});
+    // Login doesn't retroactively claim whatever anonymous session was
+    // active — start clean under the now-authenticated identity so
+    // there's never an ambiguous ownership state.
+    chatRef.current?.startFresh();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    setAuthToken(null);
+    setCurrentUser(null);
+    setView("chat");
+    setResult(null);
+    setRecalcMap({});
+    chatRef.current?.startFresh();
+  };
+
+  const handleContinueProfile = async (clientId) => {
+    try {
+      const headers = { Authorization: `Bearer ${authToken}` };
+      const profileRes = await fetch(`${API_BASE}/profiles/${clientId}`, { headers });
+      if (!profileRes.ok) throw new Error("Couldn't load that profile");
+      const profileData = await profileRes.json();
+
+      const historyRes = await fetch(
+        `${API_BASE}/chat/sessions/${profileData.chat_session_id}/history`,
+        { headers }
+      );
+      const history = historyRes.ok ? await historyRes.json() : [];
+
+      chatRef.current?.resumeSession(profileData.chat_session_id, history);
+      setResult(profileData.profile_result);
+      setRecalcMap({});
+      setView("chat");
+    } catch {
+      // Leave the user on the history view with nothing changed if this fails.
+    }
+  };
+
+  const hasResults = result !== null;
+
+  if (!authChecked) {
+    return <div className="app-shell" />; // avoid a login-state flash while /auth/me resolves
+  }
 
   return (
     <div className="app-shell">
@@ -70,63 +138,100 @@ export default function App() {
           <span className="app-header__mark" aria-hidden="true" />
           <span className="app-header__name">Nedcore Bank</span>
         </div>
-        <span className="app-header__product">Risk Profile &amp; Portfolio Match</span>
+        <div className="app-header__right">
+          <span className="app-header__product">Risk Profile &amp; Portfolio Match</span>
+          {currentUser ? (
+            <div className="app-header__account">
+              <button className="btn btn-ghost app-header__nav-btn" onClick={() => setView("history")}>
+                My Profiles
+              </button>
+              <button className="btn btn-ghost app-header__nav-btn" onClick={handleLogout}>
+                Log out
+              </button>
+            </div>
+          ) : (
+            <div className="app-header__account">
+              <button className="btn btn-ghost app-header__nav-btn" onClick={() => setView("login")}>
+                Log in
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
-      <div className="app-body">
-        <aside className="app-rail">
-          <div className="app-rail__ladder-wrap card">
-            <span className="field-label">Your risk profile</span>
-            <RiskLadder activeBand={step === 0 ? 0 : previewTolerance} />
-          </div>
-          <ol className="app-rail__steps">
-            {STEPS.map((label, i) => (
-              <li
-                key={label}
-                className={`app-rail__step ${i === step ? "is-active" : ""} ${i < step ? "is-done" : ""}`}
-              >
-                <span className="app-rail__step-index mono">{i + 1}</span>
-                {label}
-              </li>
-            ))}
-          </ol>
-        </aside>
+      {/*
+        Single persistent chat area — NOT re-mounted between phases or
+        when navigating to login/history and back. Only its wrapping
+        classes (and whether <main> is present as a sibling) change, so
+        the ChatPanel instance and its message history survive intake
+        -> results, and a trip to another view, intact. Hidden via CSS
+        rather than unmounted when another view is active.
+      */}
+      <div
+        className={`app-body ${hasResults ? "app-body--results" : "app-body--intake"}`}
+        style={{ display: view === "chat" ? undefined : "none" }}
+      >
+        {hasResults && (
+          <main className="results-shell__main">
+            <ResultsPanel result={result} recalculatedProjections={recalcMap} />
+          </main>
+        )}
 
-        <main className="app-main">
-          <div className="app-mobile-ladder">
-            <RiskLadder
-              activeBand={step === 0 ? 0 : previewTolerance}
-              orientation="horizontal"
-            />
-          </div>
-
-          {step === 0 && (
-            <QuickQuestions
-              value={quickProfile}
-              onChange={setQuickProfile}
-              onContinue={() => setStep(1)}
-            />
+        <aside className={`chat-area ${hasResults ? "chat-area--docked" : "chat-area--full"} ${sheetExpanded ? "is-expanded" : ""}`}>
+          {hasResults && (
+            <button
+              type="button"
+              className="chat-dock__toggle"
+              onClick={() => setSheetExpanded((e) => !e)}
+            >
+              <span className="chat-dock__toggle-icon">💬</span>
+              {sheetExpanded ? "Hide chat" : "Ask about your results"}
+            </button>
           )}
-          {step === 1 && (
+          <div className="chat-area__body">
             <ChatPanel
-              quickProfile={quickProfile}
+              ref={chatRef}
               sessionId={sessionId}
               setSessionId={setSessionId}
-              extracted={extracted}
-              setExtracted={setExtracted}
-              onContinue={() => setShowConfirm(true)}
+              authToken={authToken}
+              onFinalized={handleFinalized}
+              onRecalculated={handleRecalculated}
+              onSummary={setActiveSummary}
+              hasResults={hasResults}
             />
-          )}
-          {step === 2 && <ResultsPanel quickProfile={quickProfile} sessionId={sessionId} />}
-        </main>
+          </div>
+        </aside>
       </div>
 
-      {showConfirm && (
-        <ConfirmModal
-          quickProfile={quickProfile}
-          extracted={extracted}
-          onConfirm={handleConfirm}
-          onClose={() => setShowConfirm(false)}
+      {view === "login" && (
+        <AuthForm
+          mode="login"
+          onAuthenticated={handleAuthenticated}
+          onSwitchMode={() => setView("signup")}
+          onCancel={() => setView("chat")}
+        />
+      )}
+      {view === "signup" && (
+        <AuthForm
+          mode="signup"
+          onAuthenticated={handleAuthenticated}
+          onSwitchMode={() => setView("login")}
+          onCancel={() => setView("chat")}
+        />
+      )}
+      {view === "history" && (
+        <ProfileHistory
+          authToken={authToken}
+          onContinue={handleContinueProfile}
+          onBack={() => setView("chat")}
+        />
+      )}
+
+      {activeSummary && (
+        <SummaryModal
+          summary={activeSummary}
+          onConfirm={handleSummaryConfirm}
+          onClose={() => setActiveSummary(null)}
         />
       )}
     </div>

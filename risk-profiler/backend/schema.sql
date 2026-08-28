@@ -7,12 +7,28 @@
 PRAGMA foreign_keys = ON;
 
 -- ---------------------------------------------------------------------
+-- USERS
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    email          TEXT NOT NULL UNIQUE,
+    password_hash  TEXT NOT NULL,
+    full_name      TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ---------------------------------------------------------------------
 -- CHAT SESSIONS
+-- user_id is nullable — anonymous ("guest") use keeps working exactly
+-- as before; a session only becomes owned when started with a valid
+-- Authorization header.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id             INTEGER REFERENCES users(id),
     known_context       TEXT NOT NULL DEFAULT '{}',
     extracted_profile   TEXT NOT NULL DEFAULT '{}',
+    finalized_result    TEXT,   -- JSON ProfileResult snapshot, set once the client confirms. Its presence is what switches this session from intake mode to post-results ("what if") mode.
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -27,9 +43,13 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 -- ---------------------------------------------------------------------
 -- CLIENTS
+-- user_id denormalized here too (rather than only reachable via
+-- chat_session_id) so "list this user's past profiles" is a single
+-- indexed query, not a join every time.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS clients (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id                     INTEGER REFERENCES users(id),
     full_name                  TEXT NOT NULL,
     age                        INTEGER NOT NULL,
     dependents                 INTEGER NOT NULL DEFAULT 0,

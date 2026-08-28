@@ -1,114 +1,24 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import RiskLadder from "./RiskLadder";
 import Toast from "./Toast";
-
-const API_BASE = "http://localhost:8000";
-
-const DURATION_OPTIONS = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30];
 
 function formatRand(value) {
   return `R${Math.round(value).toLocaleString()}`;
 }
 
-export default function ResultsPanel({ quickProfile, sessionId }) {
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
+/**
+ * Purely a display component now — the finalize call happens once,
+ * in App.jsx, when the chat confirms the profile. "What if" questions
+ * are answered by the chat itself; when the chat's recalculation tool
+ * fires, App.jsx merges the new numbers into `recalculatedProjections`
+ * and this component just reflects whichever is freshest per product.
+ */
+export default function ResultsPanel({ result, recalculatedProjections }) {
   const [toastMessage, setToastMessage] = useState(null);
-
-  const [calc, setCalc] = useState({
-    horizonYears: quickProfile.investment_horizon_years,
-    initialAmount: quickProfile.available_lump_sum,
-    monthlyAmount: quickProfile.monthly_contribution,
-  });
-  const [recalculated, setRecalculated] = useState(null); // null = show default projections
-  const [recalculating, setRecalculating] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/clients/profile`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...quickProfile, chat_session_id: sessionId }),
-        });
-        if (!res.ok) throw new Error((await res.json()).detail || "Request failed");
-        setResult(await res.json());
-      } catch (e) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const investNow = (productName) => {
     setToastMessage(`Great choice — we've started your application for ${productName}.`);
   };
-
-  const recalculate = async () => {
-    if (!result) return;
-    const pairs = result.matched_portfolios.flatMap((pf) =>
-      pf.matched_products.map((prod) => ({ product_id: prod.id, portfolio_id: prod.portfolio_id }))
-    );
-    if (pairs.length === 0) return;
-
-    setRecalculating(true);
-    try {
-      const res = await fetch(`${API_BASE}/projections/batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          initial_amount: calc.initialAmount,
-          monthly_amount: calc.monthlyAmount,
-          horizon_years: calc.horizonYears,
-          pairs,
-        }),
-      });
-      if (!res.ok) throw new Error("Recalculation failed");
-      const items = await res.json();
-      const byKey = {};
-      items.forEach((item) => {
-        byKey[`${item.product_id}-${item.portfolio_id}`] = item.projection;
-      });
-      setRecalculated(byKey);
-    } catch {
-      // leave existing values in place on failure
-    } finally {
-      setRecalculating(false);
-    }
-  };
-
-  const resetCalc = () => {
-    setCalc({
-      horizonYears: quickProfile.investment_horizon_years,
-      initialAmount: quickProfile.available_lump_sum,
-      monthlyAmount: quickProfile.monthly_contribution,
-    });
-    setRecalculated(null);
-  };
-
-  const projectionFor = (prod) => {
-    if (recalculated) return recalculated[`${prod.id}-${prod.portfolio_id}`] ?? null;
-    return prod.projection;
-  };
-
-  if (loading) {
-    return (
-      <div className="step-content">
-        <p className="step-subtitle step-subtitle--loading">Calculating your risk matrix…</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="step-content">
-        <p className="field-error">{error}</p>
-      </div>
-    );
-  }
 
   const markers = {
     tolerance: result.tolerance_band,
@@ -116,14 +26,18 @@ export default function ResultsPanel({ quickProfile, sessionId }) {
     horizon: result.horizon_band,
   };
 
-  const durationOptions = DURATION_OPTIONS.includes(calc.horizonYears)
-    ? DURATION_OPTIONS
-    : [...DURATION_OPTIONS, calc.horizonYears].sort((a, b) => a - b);
+  const projectionFor = (prod) => {
+    const override = recalculatedProjections[`${prod.id}-${prod.portfolio_id}`];
+    return override
+      ? { ...override, isRecalculated: true }
+      : prod.projection
+      ? { ...prod.projection, isRecalculated: false }
+      : null;
+  };
 
   return (
     <div className="step-content step-content--enter">
       <header className="step-header">
-        <span className="pill">Step 3 of 3</span>
         <h2>Your risk matrix</h2>
         {result.goals_detail && <p className="step-subtitle">Goals: {result.goals_detail}</p>}
       </header>
@@ -161,64 +75,10 @@ export default function ResultsPanel({ quickProfile, sessionId }) {
               )}
             </div>
             <p className="results-hero__note">
-              Your recommendation is governed by the lowest of tolerance, capacity, and
-              horizon — the dot on the ladder shows which one is doing the constraining.
+              Governed by the lowest of tolerance, capacity, and horizon — the dot on the
+              ladder shows which one is constraining. Ask the chat "what if I invest more"
+              to see how the numbers below change.
             </p>
-          </div>
-        </div>
-
-        <div className="calc-panel card">
-          <div className="calc-panel__header">
-            <h4 className="extracted-panel__title">Projection calculator</h4>
-            <p className="step-subtitle">
-              Try a different amount or duration — every projection below updates to match.
-            </p>
-          </div>
-          <div className="calc-panel__controls">
-            <div>
-              <label className="field-label">Duration</label>
-              <select
-                className="select-input"
-                value={calc.horizonYears}
-                onChange={(e) => setCalc((c) => ({ ...c, horizonYears: Number(e.target.value) }))}
-              >
-                {durationOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y} year{y !== 1 ? "s" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="field-label">Initial amount (R)</label>
-              <input
-                type="number"
-                className="text-input mono"
-                value={calc.initialAmount}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => setCalc((c) => ({ ...c, initialAmount: Number(e.target.value) || 0 }))}
-              />
-            </div>
-            <div>
-              <label className="field-label">Monthly amount (R)</label>
-              <input
-                type="number"
-                className="text-input mono"
-                value={calc.monthlyAmount}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => setCalc((c) => ({ ...c, monthlyAmount: Number(e.target.value) || 0 }))}
-              />
-            </div>
-          </div>
-          <div className="calc-panel__actions">
-            {recalculated && (
-              <button className="btn btn-ghost" onClick={resetCalc}>
-                Reset to my numbers
-              </button>
-            )}
-            <button className="btn btn-primary" onClick={recalculate} disabled={recalculating}>
-              {recalculating ? "Recalculating…" : "Recalculate"}
-            </button>
           </div>
         </div>
 
@@ -271,15 +131,13 @@ export default function ResultsPanel({ quickProfile, sessionId }) {
                         )}
 
                         {projection && (
-                          <div className="projection-box mono">
+                          <div className={`projection-box mono ${projection.isRecalculated ? "projection-box--updated" : ""}`}>
+                            {projection.isRecalculated && <span className="projection-box__badge">Updated</span>}
                             <span className="projection-box__expected">
                               {formatRand(projection.expected_value)}
                             </span>
                             <span className="projection-box__range">
                               {formatRand(projection.lower_value)} – {formatRand(projection.upper_value)}
-                            </span>
-                            <span className="projection-box__meta">
-                              projected after {calc.horizonYears}y · net {projection.net_expected_return_pct}%/yr
                             </span>
                           </div>
                         )}

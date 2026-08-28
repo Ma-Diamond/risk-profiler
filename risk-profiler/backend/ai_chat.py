@@ -1,19 +1,32 @@
-"""AI-driven conversational intake.
+"""AI-driven conversational intake AND post-results "what if" chat.
 
-The assistant's job is narrow: have a natural conversation that fills
-in the gaps a structured form can't easily capture — goals in the
-client's own words, dependents detail, income/expenses — and,
-whenever it learns something concrete, call `record_client_info` to
-persist it. The visible chat reply and the structured extraction are
-two separate outputs of the same turn, produced via Anthropic's
-standard tool-use loop: the model calls the tool, we execute it
-(here, "executing" just means merging fields into the session's
-extracted-profile dict), send the result back, and the model then
-produces its next visible message.
+Two distinct phases share the same tool-use loop machinery
+(`run_turn`) but use different tool sets and system prompts:
 
-This keeps extraction auditable: every field in `extracted_profile`
-was explicitly recorded by a named tool call, not silently inferred
-by parsing free text after the fact.
+INTAKE phase (before the client has confirmed):
+  - `record_client_info` — the model calls this whenever it learns a
+    concrete fact. Fields merge into the session's extracted_profile.
+  - `request_risk_ratings` — shows the client a 5-question 1-5 rating
+    widget instead of the model asking them one at a time in text.
+  - `show_profile_summary` — shows the client a formatted summary
+    card of everything gathered, instead of the model typing out a
+    markdown recap in the chat itself.
+  - `confirm_and_proceed` — the model calls this ONLY after the client
+    has explicitly confirmed the summary is accurate. The backend
+    double-checks completeness before honouring it (see
+    is_profile_complete) — a premature or mistaken call gets a
+    "missing_fields" tool_result back instead of silently finalizing
+    an incomplete profile.
+
+POST-RESULTS phase (after confirm_and_proceed has succeeded):
+  - `recalculate_investment_projection` — "what if I invest more /
+    for longer" questions. The model calls this instead of the client
+    using a manual duration/amount form; the backend computes the
+    numbers and the model explains them conversationally.
+
+Which phase a session is in is a deterministic backend decision (see
+main.py: whether chat_sessions.finalized_result is set), not something
+the model decides for itself.
 """
 
 from __future__ import annotations
@@ -24,40 +37,26 @@ import anthropic
 
 MODEL = "claude-sonnet-5"
 
-BASE_INSTRUCTIONS = """You are a financial intake assistant for a bank's investment \
-risk-profiling tool. The client has already completed a short structured \
-questionnaire — you are told exactly what it captured below. Do NOT ask about \
-anything already listed there; treat it as known and move straight past it. \
-Your job is to fill in what that form can't easily capture:
+# ---------------------------------------------------------------------
+# Risk-attitude questions — identical wording/order/scoring to the old
+# slider-based form, just asked conversationally now. Preserving these
+# verbatim means scoring.py's tolerance_band() needs zero changes.
+# ---------------------------------------------------------------------
+TOL_QUESTIONS_NOVICE = [
+    "I'd be comfortable seeing my investment drop 20% in a bad year, if it meant better growth over the long run.",
+    "I'd rather invest in things I understand well than chase something complex with higher potential.",
+    "If markets took a sudden downturn, I'd want to move my money to cash right away.",
+    "I'm confident I won't need to touch this money for several years.",
+    "I'm willing to take on some risk to pursue a good financial opportunity.",
+]
 
-- their investment goal(s) in their own words (the form may only have a \
-category like "retirement" — get the actual story)
-- confirm/refine number of dependents and their financial responsibility for them
-- gross monthly income and monthly expenses, ONLY if these are not already \
-listed as known below — if they are known, do not ask about them again unless \
-the client brings them up themselves
-- anything else materially relevant to suitability (debt, upcoming large \
-expenses, job stability)
-
-Do NOT ask the client what tax bracket they're in — most people don't know \
-this off-hand, and it's estimated automatically from their income instead. \
-Only record a tax_bracket if the client volunteers it unprompted (e.g. "I'm \
-in the 45% bracket").
-
-Ask ONE question at a time, in plain conversational language — never a wall of \
-questions, and never a question about something already known. Whenever the \
-client gives you a concrete fact, call record_client_info immediately with \
-just the fields you learned (don't re-send fields you haven't just learned, \
-and don't re-send fields already listed as known below unless the client \
-corrected them). Keep replies short — two or three sentences. If the client \
-uploads a bank statement, use the transaction summary you're given to \
-estimate income and expenses, state your estimate back to them in plain \
-terms, and ask them to confirm or correct it before recording it.
-
-When you believe you have goals detail, dependents, income, and expenses \
-(whether from the known context below or from this conversation), tell the \
-client they're done and can move on to their results — do not keep asking \
-more questions after that point."""
+TOL_QUESTIONS_EXPERT = [
+    "OK with a 20%+ drawdown for better long-run returns?",
+    "Prefer simplicity over complexity, even capping upside?",
+    "Would a downturn push you to de-risk immediately?",
+    "Genuinely long horizon — no near-term liquidity need?",
+    "Willing to lean into risk for the right opportunity?",
+]
 
 _GOAL_LABELS = {
     "retirement": "retirement",
@@ -65,123 +64,317 @@ _GOAL_LABELS = {
     "general_growth": "general growth",
 }
 
-_KNOWN_CONTEXT_LABELS = [
-    ("investment_goal", "goal category", lambda v: _GOAL_LABELS.get(v, v)),
-    ("age", "age", str),
-    ("dependents", "dependents", str),
-    ("gross_monthly_income", "gross monthly income", lambda v: f"R{v:,.0f}"),
-    ("monthly_expenses", "monthly expenses", lambda v: f"R{v:,.0f}"),
-    ("investment_horizon_years", "investment horizon", lambda v: f"{v} years"),
-    ("emergency_fund_months", "emergency fund", lambda v: f"{v} months of expenses"),
+# ---------------------------------------------------------------------
+# Completeness — deterministic, backend-owned. The model's own sense
+# of "I think I'm done" is only ever a suggestion; this is the real
+# gate confirm_and_proceed checks before it's allowed to finalize.
+# ---------------------------------------------------------------------
+REQUIRED_FIELDS = [
+    "full_name",
+    "age",
+    "dependents",
+    "gross_monthly_income",
+    "monthly_expenses",
+    "emergency_fund_months",
+    "investment_horizon_years",
+    "investment_goal",
+    "available_lump_sum",
+    "monthly_contribution",
+    "knowledge_score",
 ]
 
 
-def build_system_prompt(known_context: dict) -> str:
-    """Fold the quick-form answers into the system prompt as an explicit
-    'already known, do not re-ask' list."""
-    if not known_context:
-        return BASE_INSTRUCTIONS + "\n\nThe client has not filled in any structured form yet — ask everything."
+def is_profile_complete(extracted: dict) -> tuple[bool, list[str]]:
+    missing = [f for f in REQUIRED_FIELDS if extracted.get(f) in (None, "")]
 
-    lines = []
-    for key, label, fmt in _KNOWN_CONTEXT_LABELS:
-        if known_context.get(key) not in (None, "", 0) or (
-            key in ("dependents", "age") and known_context.get(key) == 0
-        ):
-            value = known_context.get(key)
-            if value in (None, ""):
-                continue
-            lines.append(f"- {label}: {fmt(value)}")
+    tol = extracted.get("tolerance_questionnaire")
+    if not (
+        isinstance(tol, list)
+        and len(tol) == 5
+        and all(isinstance(x, (int, float)) and 1 <= x <= 5 for x in tol)
+    ):
+        missing.append("tolerance_questionnaire (all 5 risk-attitude answers)")
 
-    known_block = "\n".join(lines) if lines else "(nothing usable was filled in)"
-    return (
-        BASE_INSTRUCTIONS
-        + "\n\nAlready known from the structured form (do not ask about these again):\n"
-        + known_block
-    )
+    return (len(missing) == 0, missing)
 
 
-def build_opening_message(known_context: dict) -> str:
-    """A deterministic, no-API-call opening line personalized to what's
-    already known, so the very first turn never repeats the form."""
-    name = known_context.get("full_name", "").split(" ")[0] if known_context.get("full_name") else ""
-    greeting = f"Hi {name}!" if name else "Hi!"
+# ---------------------------------------------------------------------
+# INTAKE phase
+# ---------------------------------------------------------------------
+INTAKE_SYSTEM_PROMPT = """You are a financial intake assistant for a bank's investment \
+risk-profiling tool. There is no structured form anymore — you are the ONLY way the \
+client provides their information, so you need to gather everything below through \
+natural conversation, one question at a time, never a wall of questions.
 
-    goal = known_context.get("investment_goal")
-    dependents = known_context.get("dependents")
+WHAT YOU NEED TO COLLECT (call record_client_info the moment you learn each one):
+- full_name
+- age
+- dependents (number of financial dependents)
+- investment_goal — one of: "retirement", "house_deposit", "general_growth". Also ask \
+what they're investing towards in their own words and record that separately as `goals`.
+- investment_horizon_years — how many years until they'd need the money
+- gross_monthly_income
+- monthly_expenses
+- emergency_fund_months — ask "do you have money set aside for emergencies?" first; if \
+no, record 0 immediately and move on, don't ask a follow-up number. If yes, ask how many \
+months of expenses it covers — if they answer with a Rand amount instead (e.g. "I have \
+R100,000 saved"), record that as emergency_fund_amount and the months figure will be \
+calculated automatically for you; do NOT do that division yourself.
+- available_lump_sum — ask "do you have a lump sum ready to invest right now?" first; if \
+no, record 0 and move on. If yes, ask how much.
+- monthly_contribution — ask "would you like to also invest a set amount every month?" \
+first; if no, record 0 and move on. If yes, ask how much.
+- knowledge_score — 1 (new to investing) to 5 (expert), based on how they describe their \
+own experience. Ask this before the risk ratings below, since it changes their phrasing.
+- tolerance_questionnaire — exactly 5 integers 1-5. DO NOT ask these questions yourself \
+in text. Once you have dependents, goal, horizon, income, expenses, emergency fund, lump \
+sum, monthly contribution, AND knowledge_score, call request_risk_ratings — this shows \
+the client a rating widget instead of five back-and-forth messages. Just say something \
+brief like "Last thing — a quick rating scale below" alongside the tool call. The \
+client's ratings come back to you afterwards as a system message; record them with \
+record_client_info exactly as given, don't re-ask.
 
-    if goal:
-        goal_label = _GOAL_LABELS.get(goal, goal)
-        goal_line = f"I can see you're investing towards {goal_label}."
-    else:
-        goal_line = "What are you investing towards — retirement, a house deposit, or general growth?"
+OPTIONAL — only record if the client volunteers it unprompted, never ask directly:
+- tax_bracket (most people don't know their marginal rate — it's estimated automatically \
+from income; if they do mention a rate like "I'm in the 39% bracket", record it)
+- notes — debt, job stability, upcoming large expenses, anything else materially relevant
 
-    if dependents is not None and dependents > 0:
-        ask_line = (
-            f"You mentioned {dependents} dependent{'s' if dependents != 1 else ''} — "
-            "could you tell me a bit more about your goal in your own words?"
-        )
-    else:
-        ask_line = "Could you tell me a bit more about that goal in your own words?"
+BANK STATEMENTS: if the client uploads one, use the transaction summary you're given to \
+estimate income and expenses, state your estimate back to them in plain terms, and get \
+their confirmation before recording it via record_client_info.
 
-    return f"{greeting} {goal_line} {ask_line}"
+CONFIRMATION — this is important: once you believe you have everything required \
+(including the risk ratings), call show_profile_summary — this shows the client a \
+summary card with everything you've gathered, so DO NOT type out the full recap \
+yourself in text; just say something brief like "Here's everything I've got — take a \
+look!" alongside the tool call. Do NOT call confirm_and_proceed until the client has \
+clearly confirmed the summary is correct (e.g. they said yes / looks good / that's \
+right after seeing it). If they correct something, update it with record_client_info \
+and call show_profile_summary again before asking a second time. If you call \
+confirm_and_proceed too early — before all required fields are collected — the tool \
+will tell you exactly what's still missing; just ask for those and try again once you \
+have everything and the client has confirmed the summary."""
+
+
+RISK_WIDGET_TOOL = {
+    "name": "request_risk_ratings",
+    "description": (
+        "Shows the client a rating widget for the 5 risk-attitude questions (1-5 each) "
+        "instead of you asking them one at a time in text. Call this once dependents, "
+        "goal, horizon, income, expenses, emergency fund, lump sum, monthly "
+        "contribution, and knowledge_score are all already known — the widget's "
+        "wording depends on knowledge_score. Don't type out the 5 questions yourself."
+    ),
+    "input_schema": {"type": "object", "properties": {}},
+}
+
+SUMMARY_TOOL = {
+    "name": "show_profile_summary",
+    "description": (
+        "Shows the client a formatted summary card of everything gathered so far, for "
+        "them to review. Call this once you believe the profile is complete, INSTEAD "
+        "OF typing out the full recap in text yourself — just say a brief lead-in "
+        "sentence alongside the call. Call it again if the client corrects something, "
+        "before asking for confirmation a second time."
+    ),
+    "input_schema": {"type": "object", "properties": {}},
+}
 
 
 RECORD_TOOL = {
     "name": "record_client_info",
     "description": (
-        "Record structured facts just learned about the client's financial "
-        "situation. Call this every time you learn or refine a fact — only "
-        "include the fields you learned in THIS turn, omit anything unchanged."
+        "Record structured facts just learned about the client. Call this every time "
+        "you learn or refine a fact — only include the fields you learned in THIS turn."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
+            "full_name": {"type": "string"},
+            "age": {"type": "integer"},
+            "dependents": {"type": "integer"},
+            "investment_goal": {
+                "type": "string",
+                "enum": ["retirement", "house_deposit", "general_growth"],
+            },
             "goals": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Investment goals in the client's own words, e.g. ['retirement', 'kids education']",
+                "description": "Goals in the client's own words, e.g. ['retirement', 'kids education']",
             },
-            "dependents": {
+            "investment_horizon_years": {"type": "number"},
+            "gross_monthly_income": {"type": "number", "description": "Rand per month"},
+            "monthly_expenses": {"type": "number", "description": "Rand per month"},
+            "emergency_fund_months": {
+                "type": "number",
+                "description": "Months of expenses their emergency fund covers, 0 if none. Only set this directly if the client states months themselves — if they give a Rand amount instead, use emergency_fund_amount and months will be calculated automatically.",
+            },
+            "emergency_fund_amount": {
+                "type": "number",
+                "description": "Rand amount they have saved for emergencies, if that's how they answered (e.g. 'I have R100,000 saved') rather than stating months. Months-of-expenses is calculated automatically from this — don't do the division yourself.",
+            },
+            "available_lump_sum": {
+                "type": "number",
+                "description": "Lump sum available to invest now, 0 if none",
+            },
+            "monthly_contribution": {
+                "type": "number",
+                "description": "Amount they want to invest monthly going forward, 0 if none",
+            },
+            "knowledge_score": {
                 "type": "integer",
-                "description": "Number of financial dependents",
+                "description": "1 (new to investing) to 5 (expert)",
             },
-            "gross_monthly_income": {
-                "type": "number",
-                "description": "Gross monthly income in Rand",
-            },
-            "monthly_expenses": {
-                "type": "number",
-                "description": "Total monthly expenses in Rand",
+            "tolerance_questionnaire": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "minItems": 5,
+                "maxItems": 5,
+                "description": "Exactly 5 integers 1-5, one per risk-attitude question, in the fixed order given in the system prompt",
             },
             "tax_bracket": {
                 "type": "string",
-                "description": (
-                    "Approximate marginal tax bracket, e.g. '18%', '31%', '39%', '45%'. "
-                    "Only include this if the client states it themselves, unprompted — "
-                    "never ask for it."
-                ),
+                "description": "Only if the client states it themselves, unprompted, e.g. '39%'",
             },
-            "notes": {
-                "type": "string",
-                "description": "Any other materially relevant detail (debt, job stability, upcoming expenses)",
-            },
+            "notes": {"type": "string"},
         },
     },
 }
 
+CONFIRM_TOOL = {
+    "name": "confirm_and_proceed",
+    "description": (
+        "Call this ONLY after the client has explicitly confirmed that your recap of "
+        "their profile is accurate (they said something like 'yes', 'looks good', "
+        "'that's correct'). Never call this speculatively or before recapping. If the "
+        "profile isn't actually complete yet, this returns exactly what's still missing "
+        "so you know what to ask next."
+    ),
+    "input_schema": {"type": "object", "properties": {}},
+}
 
-def _get_client() -> anthropic.Anthropic:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set. Set it in the backend environment "
-            "before using the chat endpoints."
-        )
-    return anthropic.Anthropic()
+INTAKE_TOOLS = [RECORD_TOOL, RISK_WIDGET_TOOL, SUMMARY_TOOL, CONFIRM_TOOL]
 
 
-def _merge_extracted(extracted: dict, new_fields: dict) -> dict:
-    """Merge only the fields present in new_fields, list-valued fields
-    (goals) are unioned rather than overwritten."""
+def build_risk_widget(extracted: dict) -> dict:
+    """Which question wording tier to show, based on the client's own
+    self-rated knowledge_score."""
+    tier = "expert" if (extracted.get("knowledge_score") or 0) >= 4 else "novice"
+    questions = TOL_QUESTIONS_EXPERT if tier == "expert" else TOL_QUESTIONS_NOVICE
+    return {"tier": tier, "questions": questions}
+
+
+def build_profile_summary(extracted: dict) -> dict:
+    """A structured snapshot for the frontend's summary card — deliberately
+    just passes through what's known rather than composing prose, so the
+    card renders real fields instead of parsing the model's markdown."""
+    goal = extracted.get("investment_goal")
+    return {
+        "full_name": extracted.get("full_name"),
+        "age": extracted.get("age"),
+        "dependents": extracted.get("dependents"),
+        "investment_goal": goal,
+        "investment_goal_label": _GOAL_LABELS.get(goal, goal),
+        "goals": extracted.get("goals", []),
+        "investment_horizon_years": extracted.get("investment_horizon_years"),
+        "gross_monthly_income": extracted.get("gross_monthly_income"),
+        "monthly_expenses": extracted.get("monthly_expenses"),
+        "emergency_fund_months": extracted.get("emergency_fund_months"),
+        "emergency_fund_amount": extracted.get("emergency_fund_amount"),
+        "available_lump_sum": extracted.get("available_lump_sum"),
+        "monthly_contribution": extracted.get("monthly_contribution"),
+        "knowledge_score": extracted.get("knowledge_score"),
+        "tolerance_questionnaire": extracted.get("tolerance_questionnaire"),
+        "tax_bracket": extracted.get("tax_bracket"),
+        "notes": extracted.get("notes"),
+    }
+
+
+def build_opening_message() -> str:
+    return (
+        "Hi! I'm here to help figure out the right investment risk profile for you — "
+        "it's just a conversation, no forms. Let's start simple: what's your name?"
+    )
+
+
+# ---------------------------------------------------------------------
+# POST-RESULTS phase
+# ---------------------------------------------------------------------
+RECALCULATE_TOOL = {
+    "name": "recalculate_investment_projection",
+    "description": (
+        "Recalculate the projected investment value for the client's matched products "
+        "under a different lump sum, monthly contribution, or horizon than originally "
+        "used. Call this whenever the client asks a 'what if' question about investing "
+        "a different amount or for a different length of time — this replaces any "
+        "manual calculator, so always use this tool rather than estimating the answer "
+        "yourself."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "initial_amount": {
+                "type": "number",
+                "description": "Lump sum to project with — use the client's original amount if they aren't changing it",
+            },
+            "monthly_amount": {
+                "type": "number",
+                "description": "Monthly contribution to project with — use the original if unchanged",
+            },
+            "horizon_years": {
+                "type": "number",
+                "description": "Investment horizon in years to project over — use the original if unchanged",
+            },
+            "product_name": {
+                "type": "string",
+                "description": "Which matched product to recalculate for, by name (partial match ok). Omit to recalculate for every matched product.",
+            },
+        },
+        "required": ["initial_amount", "monthly_amount", "horizon_years"],
+    },
+}
+
+POST_RESULTS_TOOLS = [RECALCULATE_TOOL]
+
+
+def build_post_results_system_prompt(finalized_result: dict) -> str:
+    lines = []
+    for pf in finalized_result.get("matched_portfolios", []):
+        for prod in pf.get("matched_products", []):
+            lines.append(
+                f"- {prod['name']} (under {pf['name']}, {prod['tax_wrapper']} wrapper, "
+                f"{prod['total_fee_pct']}% fee)"
+            )
+    products_block = "\n".join(lines) if lines else "(no matched products)"
+
+    return f"""You are a friendly financial assistant helping a client understand the \
+investment risk matrix they've just been shown. Their matched portfolios/products are:
+
+{products_block}
+
+The client can ask "what if" questions about investing a different amount or for a \
+different duration — when they do, call recalculate_investment_projection (don't \
+estimate the numbers yourself, always use the tool) and then explain the result in \
+plain, encouraging language. Keep replies short — two or three sentences plus the key \
+numbers. You can also answer general questions about the products, fees, or their risk \
+band using the information above. If asked to change something fundamental about their \
+profile (income, goal, age, etc.), explain that they'd need to go back and edit their \
+details rather than changing it here."""
+
+
+# ---------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------
+def merge_extracted(extracted: dict, new_fields: dict) -> dict:
+    """Merge only the fields present in new_fields; list-valued fields
+    (goals) are unioned rather than overwritten.
+
+    Deterministic derivation: if the client gives a Rand amount for
+    their emergency fund rather than stating months directly, months
+    is computed here from amount / monthly_expenses — we don't trust
+    the model to do this division itself. Whenever both figures are
+    known, the computed value always wins over anything the model may
+    have separately guessed for emergency_fund_months."""
     merged = dict(extracted)
     for key, value in new_fields.items():
         if value in (None, "", []):
@@ -191,41 +384,54 @@ def _merge_extracted(extracted: dict, new_fields: dict) -> dict:
             merged["goals"] = sorted(existing | set(value))
         else:
             merged[key] = value
+
+    if merged.get("emergency_fund_amount") and merged.get("monthly_expenses"):
+        months = merged["emergency_fund_amount"] / merged["monthly_expenses"]
+        merged["emergency_fund_months"] = round(months, 1)
+
     return merged
+
+
+def _get_client() -> anthropic.Anthropic:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is not set. Set it in the backend environment "
+            "before using the chat endpoints."
+        )
+    return anthropic.Anthropic(api_key=api_key)
 
 
 def run_turn(
     history: list[dict],
     user_content: str | list[dict],
-    extracted: dict,
     system_prompt: str,
+    tools: list[dict],
+    tool_executor,
     client: anthropic.Anthropic | None = None,
-) -> tuple[str, dict, list[dict]]:
-    """Run one conversational turn.
+) -> tuple[str, list[dict]]:
+    """Run one conversational turn with an arbitrary tool set.
 
-    `user_content` is either a plain string (a normal chat message) or a
-    list of Anthropic content blocks (used for the statement-upload
-    turn, where we inject the extracted PDF text as an extra text
-    block alongside the client's message).
+    `tool_executor(tool_name: str, tool_input: dict) -> dict` is called
+    for every tool_use block; its return value is JSON-serialized as
+    the tool_result content. Side effects (merging extracted fields,
+    finalizing a profile, computing projections) belong in the
+    executor the caller supplies — this function only drives the loop.
 
-    `system_prompt` should come from build_system_prompt(known_context)
-    so the model knows what the quick form already collected.
-
-    Returns (assistant_reply_text, updated_extracted_profile, updated_history).
+    Returns (assistant_reply_text, updated_history).
     """
+    import json as _json
+
     client = client or _get_client()
     messages = list(history)
     messages.append({"role": "user", "content": user_content})
 
-    # Standard tool-use loop: keep calling the model, executing any
-    # tool_use blocks, and feeding results back, until it produces a
-    # turn with no further tool calls (its visible reply).
-    for _ in range(5):  # hard cap so a stuck loop can't run forever
+    for _ in range(6):  # hard cap so a stuck loop can't run forever
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
             system=system_prompt,
-            tools=[RECORD_TOOL],
+            tools=tools,
             messages=messages,
         )
         assistant_blocks = [block.model_dump() for block in response.content]
@@ -236,20 +442,18 @@ def run_turn(
             reply_text = "".join(
                 b["text"] for b in assistant_blocks if b["type"] == "text"
             )
-            return reply_text, extracted, messages
+            return reply_text, messages
 
         tool_results = []
         for tu in tool_uses:
-            if tu["name"] == "record_client_info":
-                extracted = _merge_extracted(extracted, tu["input"])
+            result = tool_executor(tu["name"], tu["input"])
             tool_results.append(
                 {
                     "type": "tool_result",
                     "tool_use_id": tu["id"],
-                    "content": "recorded",
+                    "content": _json.dumps(result),
                 }
             )
         messages.append({"role": "user", "content": tool_results})
 
-    # Fell through the loop cap — return whatever text we can salvage.
-    return "Let's continue — could you tell me more about that?", extracted, messages
+    return "Let's continue — could you tell me more about that?", messages

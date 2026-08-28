@@ -1,22 +1,38 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import RiskRatingWidget from "./RiskRatingWidget";
 
 const API_BASE = "http://localhost:8000";
 
-const TRACKED_FIELDS = [
-  { key: "goals", label: "Goals" },
-  { key: "dependents", label: "Dependents" },
-  { key: "gross_monthly_income", label: "Income" },
-  { key: "monthly_expenses", label: "Expenses" },
-  { key: "tax_bracket", label: "Tax bracket" },
-];
-
-export default function ChatPanel({ quickProfile, sessionId, setSessionId, extracted, setExtracted, onContinue }) {
+/**
+ * The chat is now the entire interaction — before results exist it
+ * fills the screen collecting the client's full profile; after
+ * results exist, the same component gets docked into a sidebar
+ * (desktop) or a bottom sheet (mobile) by App.jsx, and switches to
+ * answering "what if" questions instead.
+ *
+ * Exposes via ref:
+ *  - sendProgrammaticMessage(text) — used by the summary popup's
+ *    "Looks good" button.
+ *  - resumeSession(sessionId, messages) — used when continuing a past
+ *    profile from history: loads an existing session's reconstructed
+ *    transcript instead of starting a new one.
+ *  - startFresh() — used on login/logout to reset to a brand new guest
+ *    (or newly-authenticated) session rather than leaving the UI
+ *    pointed at a session the current identity may not own.
+ */
+const ChatPanel = forwardRef(function ChatPanel(
+  { sessionId, setSessionId, authToken, onFinalized, onRecalculated, onSummary, hasResults },
+  ref
+) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [pendingRiskWidget, setPendingRiskWidget] = useState(null);
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
+
+  const authHeaders = () => (authToken ? { Authorization: `Bearer ${authToken}` } : {});
 
   useEffect(() => {
     if (sessionId) return;
@@ -24,8 +40,7 @@ export default function ChatPanel({ quickProfile, sessionId, setSessionId, extra
       try {
         const res = await fetch(`${API_BASE}/chat/sessions`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ known_context: quickProfile }),
+          headers: authHeaders(),
         });
         const data = await res.json();
         setSessionId(data.session_id);
@@ -39,25 +54,104 @@ export default function ChatPanel({ quickProfile, sessionId, setSessionId, extra
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [messages, pendingRiskWidget]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || sending) return;
-    const text = input.trim();
-    setInput("");
+  const handleTurnResponse = (data) => {
+    setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
+    if (data.risk_widget) {
+      setPendingRiskWidget(data.risk_widget);
+    }
+    if (data.profile_summary) {
+      onSummary(data.profile_summary);
+    }
+    if (data.finalized_result) {
+      onFinalized(data.finalized_result);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "hint",
+          text: 'You can keep asking questions here — try things like "What if I invested R500 more a month?", "What if I only invested for 10 years?", or "Which product has the lowest fees?"',
+        },
+      ]);
+    }
+    if (data.recalculated_projections && data.recalculated_projections.length > 0) {
+      onRecalculated(data.recalculated_projections);
+    }
+  };
+
+  const sendRaw = async (text) => {
     setMessages((m) => [...m, { role: "user", text }]);
     setSending(true);
     setError(null);
     try {
       const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ message: text }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Request failed");
-      const data = await res.json();
-      setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
-      setExtracted(data.extracted);
+      handleTurnResponse(await res.json());
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    sendProgrammaticMessage: (text) => sendRaw(text),
+
+    resumeSession: (newSessionId, newMessages) => {
+      setSessionId(newSessionId);
+      setMessages(newMessages);
+      setPendingRiskWidget(null);
+      setError(null);
+    },
+
+    startFresh: () => {
+      setSessionId(null);
+      setMessages([]);
+      setPendingRiskWidget(null);
+      setError(null);
+      (async () => {
+        try {
+          const res = await fetch(`${API_BASE}/chat/sessions`, {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await res.json();
+          setSessionId(data.session_id);
+          setMessages([{ role: "assistant", text: data.reply }]);
+        } catch {
+          setError("Couldn't start the conversation — check the API is running.");
+        }
+      })();
+    },
+  }));
+
+  const sendMessage = () => {
+    if (!input.trim() || sending || !sessionId) return;
+    const text = input.trim();
+    setInput("");
+    sendRaw(text);
+  };
+
+  const submitRiskRatings = async (ratings) => {
+    setMessages((m) => [
+      ...m,
+      { role: "user", text: `Risk ratings: ${ratings.join(", ")}` },
+    ]);
+    setPendingRiskWidget(null);
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/risk-ratings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ ratings }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || "Request failed");
+      handleTurnResponse(await res.json());
     } catch (e) {
       setError(e.message);
     } finally {
@@ -74,12 +168,11 @@ export default function ChatPanel({ quickProfile, sessionId, setSessionId, extra
       formData.append("file", file);
       const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/upload-statement`, {
         method: "POST",
+        headers: authHeaders(),
         body: formData,
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Upload failed");
-      const data = await res.json();
-      setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
-      setExtracted(data.extracted);
+      handleTurnResponse(await res.json());
     } catch (e) {
       setError(e.message);
     } finally {
@@ -87,36 +180,33 @@ export default function ChatPanel({ quickProfile, sessionId, setSessionId, extra
     }
   };
 
-  const fieldsKnown = TRACKED_FIELDS.filter((f) => extracted[f.key] != null && extracted[f.key] !== "");
-
   return (
-    <div className="step-content step-content--enter">
-      <header className="step-header">
-        <span className="pill">Step 2 of 3</span>
-        <h2>A few more details</h2>
-        <p className="step-subtitle">
-          Tell us in your own words — or upload a bank statement and we'll estimate income and expenses for you to confirm.
-        </p>
-      </header>
-
-      <div className="chat-layout">
-        <div className="chat-panel card">
-          <div className="chat-panel__messages" ref={scrollRef}>
-            {messages.map((m, i) => (
-              <div key={i} className={`chat-bubble chat-bubble--${m.role} ${m.isFile ? "chat-bubble--file" : ""}`}>
-                {m.text}
-              </div>
-            ))}
-            {sending && (
-              <div className="chat-bubble chat-bubble--assistant chat-bubble--typing">
-                <span /><span /><span />
-              </div>
-            )}
+    <div className="chat-panel-wrap">
+      <div className="chat-panel__messages" ref={scrollRef}>
+        {messages.map((m, i) => (
+          <div key={i} className={`chat-bubble chat-bubble--${m.role} ${m.isFile ? "chat-bubble--file" : ""}`}>
+            {m.text}
           </div>
+        ))}
+        {pendingRiskWidget && (
+          <RiskRatingWidget
+            questions={pendingRiskWidget.questions}
+            onSubmit={submitRiskRatings}
+            disabled={sending}
+          />
+        )}
+        {sending && (
+          <div className="chat-bubble chat-bubble--assistant chat-bubble--typing">
+            <span /><span /><span />
+          </div>
+        )}
+      </div>
 
-          {error && <p className="field-error chat-panel__error">{error}</p>}
+      {error && <p className="field-error chat-panel__error">{error}</p>}
 
-          <div className="chat-panel__composer">
+      <div className="chat-panel__composer">
+        {!hasResults && (
+          <>
             <button
               type="button"
               className="btn btn-ghost chat-panel__upload-btn"
@@ -136,44 +226,22 @@ export default function ChatPanel({ quickProfile, sessionId, setSessionId, extra
                 e.target.value = "";
               }}
             />
-            <input
-              className="text-input chat-panel__input"
-              placeholder="Type your answer…"
-              value={input}
-              disabled={!sessionId || sending}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            />
-            <button className="btn btn-primary" onClick={sendMessage} disabled={!sessionId || sending}>
-              Send
-            </button>
-          </div>
-        </div>
-
-        <aside className="extracted-panel card">
-          <h4 className="extracted-panel__title">What we've learned</h4>
-          {fieldsKnown.length === 0 && (
-            <p className="extracted-panel__empty">Nothing yet — keep chatting.</p>
-          )}
-          <ul className="extracted-panel__list">
-            {fieldsKnown.map((f) => (
-              <li key={f.key}>
-                <span className="extracted-panel__check">✓</span>
-                <span className="extracted-panel__label">{f.label}</span>
-                <span className="extracted-panel__value mono">
-                  {Array.isArray(extracted[f.key]) ? extracted[f.key].join(", ") : String(extracted[f.key])}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      </div>
-
-      <div className="step-actions">
-        <button className="btn btn-primary" onClick={onContinue} disabled={!sessionId}>
-          See my risk matrix
+          </>
+        )}
+        <input
+          className="text-input chat-panel__input"
+          placeholder={hasResults ? "Ask a question, e.g. what if I invest more?" : "Type your answer…"}
+          value={input}
+          disabled={!sessionId || sending}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+        />
+        <button className="btn btn-primary" onClick={sendMessage} disabled={!sessionId || sending}>
+          Send
         </button>
       </div>
     </div>
   );
-}
+});
+
+export default ChatPanel;

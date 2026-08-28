@@ -1,0 +1,9 @@
+﻿key,name,provider,risk_band,max_equity_pct,min_horizon_years,liquidity_days,reg28_compliant,min_knowledge_band,requires_emergency_fund,underlying_fee_pct,description
+capital_protector,Capital Protector Money Market,Example Asset Managers,1,0,0,1,1,1,0,0.15,Pure money market fund
+stable_income,Stable Income Fund,Example Asset Managers,2,20,1,2,1,1,0,0.55,Bond and cash heavy
+balanced_growth,Balanced Growth Fund,Example Asset Managers,3,50,3,3,1,2,1,0.85,Balanced multi-asset fund within Reg 28 limits.
+managed_flexible,Managed Flexible Fund,Example Asset Managers,3,60,4,3,0,2,1,0.95,Flexible mandate
+growth_equity,Growth Equity Fund,Example Asset Managers,4,80,5,3,1,3,1,1.1,Domestic + offshore equity tilt
+offshore_growth,Offshore Growth Feeder Fund,Example Asset Managers,4,90,7,5,0,3,1,1.35,Rand-denominated feeder into an offshore equity fund; longer horizon needed.
+aggressive_equity,Aggressive Equity Fund,Example Asset Managers,5,100,8,3,0,4,1,1.5,Concentrated high-conviction equity mandate
+thematic_growth,Thematic High Growth Fund,Example Asset Managers,5,100,10,5,0,4,1,1.75,Sector/thematic equity exposure
