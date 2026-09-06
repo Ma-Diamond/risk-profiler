@@ -6,13 +6,8 @@ Two distinct phases share the same tool-use loop machinery
 INTAKE phase (before the client has confirmed):
   - `record_client_info` — the model calls this whenever it learns a
     concrete fact. Fields merge into the session's extracted_profile.
-  - `request_risk_ratings` — shows the client a 5-question 1-5 rating
-    widget instead of the model asking them one at a time in text.
-  - `show_profile_summary` — shows the client a formatted summary
-    card of everything gathered, instead of the model typing out a
-    markdown recap in the chat itself.
   - `confirm_and_proceed` — the model calls this ONLY after the client
-    has explicitly confirmed the summary is accurate. The backend
+    has explicitly confirmed a recap is accurate. The backend
     double-checks completeness before honouring it (see
     is_profile_complete) — a premature or mistaken call gets a
     "missing_fields" tool_result back instead of silently finalizing
@@ -101,7 +96,7 @@ def is_profile_complete(extracted: dict) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------
 # INTAKE phase
 # ---------------------------------------------------------------------
-INTAKE_SYSTEM_PROMPT = """You are a financial intake assistant for a bank's investment \
+_INTAKE_SYSTEM_PROMPT_BASE = """You are a financial intake assistant for a bank's investment \
 risk-profiling tool. There is no structured form anymore — you are the ONLY way the \
 client provides their information, so you need to gather everything below through \
 natural conversation, one question at a time, never a wall of questions.
@@ -255,6 +250,22 @@ CONFIRM_TOOL = {
 
 INTAKE_TOOLS = [RECORD_TOOL, RISK_WIDGET_TOOL, SUMMARY_TOOL, CONFIRM_TOOL]
 
+# Fields considered stable enough to save on the account and reuse across
+# profiling sessions, rather than re-asked each time. Deliberately does
+# NOT include investment_goal, investment_horizon_years, available_lump_sum,
+# monthly_contribution, emergency_fund_months, or tolerance_questionnaire —
+# those are specific to each profiling exercise (a client may reasonably
+# redo their risk profile for a different goal, amount, or because their
+# risk attitude itself has changed), not durable facts about the client.
+STABLE_PROFILE_FIELDS = [
+    "full_name",
+    "age",
+    "dependents",
+    "gross_monthly_income",
+    "monthly_expenses",
+    "knowledge_score",
+]
+
 
 def build_risk_widget(extracted: dict) -> dict:
     """Which question wording tier to show, based on the client's own
@@ -290,11 +301,70 @@ def build_profile_summary(extracted: dict) -> dict:
     }
 
 
-def build_opening_message() -> str:
+def _describe_stable_fields(known_context: dict) -> list[str]:
+    """Natural-language fragments for whichever stable fields are known —
+    used to build the personalized recap in the opening message."""
+    parts = []
+    if "age" in known_context:
+        parts.append(f"{known_context['age']} years old")
+    if "dependents" in known_context:
+        n = known_context["dependents"]
+        parts.append(f"{n} dependent{'s' if n != 1 else ''}")
+    if "gross_monthly_income" in known_context:
+        parts.append(f"income of about R{known_context['gross_monthly_income']:,.0f}/month")
+    if "monthly_expenses" in known_context:
+        parts.append(f"expenses of about R{known_context['monthly_expenses']:,.0f}/month")
+    if "knowledge_score" in known_context:
+        parts.append(f"investing experience rated {known_context['knowledge_score']}/5")
+    return parts
+
+
+def build_opening_message(known_context: dict | None = None) -> str:
+    known_context = known_context or {}
+    full_name = known_context.get("full_name")
+
+    if not full_name:
+        return (
+            "Hi! I'm here to help figure out the right investment risk profile for you — "
+            "it's just a conversation, no forms. Let's start simple: what's your name?"
+        )
+
+    other_fields = _describe_stable_fields(known_context)
+    if not other_fields:
+        # Signed up with a name but no prior finalized profile yet — skip
+        # asking for the name only, everything else is still fresh.
+        return (
+            f"Hi {full_name}! I'm here to help figure out the right investment risk "
+            "profile for you — it's just a conversation, no forms. Let's start with "
+            "your age — how old are you?"
+        )
+
+    recap = ", ".join(other_fields)
     return (
-        "Hi! I'm here to help figure out the right investment risk profile for you — "
-        "it's just a conversation, no forms. Let's start simple: what's your name?"
+        f"Welcome back, {full_name}! Last time you told us you're {recap}. "
+        "Does that all still look right, or has anything changed?"
     )
+
+
+def build_intake_system_prompt(known_context: dict | None = None) -> str:
+    known_context = known_context or {}
+    saved = {k: known_context[k] for k in STABLE_PROFILE_FIELDS if k in known_context}
+    if not saved:
+        return _INTAKE_SYSTEM_PROMPT_BASE
+
+    known_lines = "\n".join(f"- {k}: {v}" for k, v in saved.items())
+    prefix = (
+        "IMPORTANT — this client has an account with details saved from a previous "
+        "profile, already pre-filled and shown to them in your opening message:\n"
+        f"{known_lines}\n\n"
+        "Do NOT ask for these again. Your opening message already asked them to "
+        "confirm these are still accurate. If their reply confirms everything (e.g. "
+        "'yes', 'still correct', 'looks right', 'all good'), move straight on to "
+        "what's not yet known — do not repeat the confirmation question. If they say "
+        "something has changed, update just that field with record_client_info and "
+        "confirm the rest is still accurate before moving on.\n\n"
+    )
+    return prefix + _INTAKE_SYSTEM_PROMPT_BASE
 
 
 # ---------------------------------------------------------------------

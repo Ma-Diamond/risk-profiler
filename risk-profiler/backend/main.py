@@ -390,6 +390,21 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | No
     client_id = cur.lastrowid
     conn.commit()
 
+    if user_id is not None:
+        stable_fields = {
+            "full_name": payload.full_name,
+            "age": payload.age,
+            "dependents": dependents,
+            "gross_monthly_income": gross_monthly_income,
+            "monthly_expenses": monthly_expenses,
+            "knowledge_score": payload.knowledge_score,
+        }
+        conn.execute(
+            "UPDATE users SET saved_profile = ? WHERE id = ?",
+            (json.dumps(stable_fields), user_id),
+        )
+        conn.commit()
+
     portfolio_rows = conn.execute("SELECT * FROM portfolios").fetchall()
     portfolios = [_row_to_portfolio(r) for r in portfolio_rows]
 
@@ -577,19 +592,45 @@ def get_tax_estimate(monthly_income: float) -> TaxEstimateOut:
 # ---------------------------------------------------------------------
 # Chat — single endpoint, two phases
 # ---------------------------------------------------------------------
+def _load_saved_known_context(conn, user_id: int) -> dict:
+    """A returning user's stable fields from their last finalized profile
+    (or just their signup name, if they haven't finalized one yet) —
+    pre-filled into a new session so those aren't asked from scratch."""
+    row = conn.execute(
+        "SELECT full_name, saved_profile FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if row is None:
+        return {}
+    if row["saved_profile"]:
+        return json.loads(row["saved_profile"])
+    if row["full_name"]:
+        return {"full_name": row["full_name"]}
+    return {}
+
+
 @app.post("/chat/sessions", response_model=ChatStartOut)
 def start_chat(
     payload: ChatStartIn = ChatStartIn(), user_id: int | None = Depends(get_optional_user_id)
 ) -> ChatStartOut:
     conn = get_connection()
+
+    known_context = dict(payload.known_context)
+    if user_id is not None:
+        known_context = {**known_context, **_load_saved_known_context(conn, user_id)}
+
+    # Pre-seed extracted_profile too, not just known_context: these are
+    # values the client already gave us, not merely context for the
+    # model's phrasing — is_profile_complete() should already count them,
+    # and if the client confirms nothing changed, no further tool call is
+    # even needed to record them.
     cur = conn.execute(
-        "INSERT INTO chat_sessions (user_id, extracted_profile, known_context) VALUES (?, '{}', ?)",
-        (user_id, json.dumps(payload.known_context)),
+        "INSERT INTO chat_sessions (user_id, extracted_profile, known_context) VALUES (?, ?, ?)",
+        (user_id, json.dumps(known_context), json.dumps(known_context)),
     )
     session_id = cur.lastrowid
     conn.commit()
 
-    opening = ai_chat.build_opening_message()
+    opening = ai_chat.build_opening_message(known_context)
     conn.execute(
         "INSERT INTO chat_messages (session_id, role, content) VALUES (?, 'assistant', ?)",
         (session_id, json.dumps(opening)),
@@ -609,7 +650,7 @@ def _load_history(conn, session_id: int) -> list[dict]:
 
 
 def _handle_intake_turn(
-    conn, session_id: int, extracted: dict, user_content, user_id: int | None = None
+    conn, session_id: int, extracted: dict, user_content, user_id: int | None = None, known_context: dict | None = None
 ) -> ChatTurnOut:
     history = _load_history(conn, session_id)
     prior_len = len(history)
@@ -646,8 +687,9 @@ def _handle_intake_turn(
 
         return {"status": "unknown_tool"}
 
+    system_prompt = ai_chat.build_intake_system_prompt(known_context)
     reply, updated_history = ai_chat.run_turn(
-        history, user_content, ai_chat.INTAKE_SYSTEM_PROMPT, ai_chat.INTAKE_TOOLS, executor
+        history, user_content, system_prompt, ai_chat.INTAKE_TOOLS, executor
     )
 
     new_messages = updated_history[prior_len:]
@@ -758,7 +800,7 @@ def send_chat_message(
 ) -> ChatTurnOut:
     conn = get_connection()
     row = conn.execute(
-        "SELECT extracted_profile, finalized_result, user_id FROM chat_sessions WHERE id = ?",
+        "SELECT extracted_profile, finalized_result, user_id, known_context FROM chat_sessions WHERE id = ?",
         (session_id,),
     ).fetchone()
     if row is None:
@@ -773,7 +815,10 @@ def send_chat_message(
             )
         else:
             extracted = json.loads(row["extracted_profile"])
-            result = _handle_intake_turn(conn, session_id, extracted, payload.message, user_id=user_id)
+            known_context = json.loads(row["known_context"])
+            result = _handle_intake_turn(
+                conn, session_id, extracted, payload.message, user_id=user_id, known_context=known_context
+            )
     except RuntimeError as e:
         conn.close()
         raise HTTPException(status_code=503, detail=str(e))
@@ -796,7 +841,7 @@ def submit_risk_ratings(
 
     conn = get_connection()
     row = conn.execute(
-        "SELECT extracted_profile, finalized_result, user_id FROM chat_sessions WHERE id = ?",
+        "SELECT extracted_profile, finalized_result, user_id, known_context FROM chat_sessions WHERE id = ?",
         (session_id,),
     ).fetchone()
     if row is None:
@@ -809,10 +854,13 @@ def submit_risk_ratings(
 
     extracted = json.loads(row["extracted_profile"])
     extracted["tolerance_questionnaire"] = payload.ratings
+    known_context = json.loads(row["known_context"])
     synthetic_message = f"[The client submitted their risk ratings via the widget: {payload.ratings}]"
 
     try:
-        result = _handle_intake_turn(conn, session_id, extracted, synthetic_message, user_id=user_id)
+        result = _handle_intake_turn(
+            conn, session_id, extracted, synthetic_message, user_id=user_id, known_context=known_context
+        )
     except RuntimeError as e:
         conn.close()
         raise HTTPException(status_code=503, detail=str(e))
@@ -829,7 +877,7 @@ async def upload_statement(
     profile is finalized."""
     conn = get_connection()
     row = conn.execute(
-        "SELECT extracted_profile, finalized_result, user_id FROM chat_sessions WHERE id = ?",
+        "SELECT extracted_profile, finalized_result, user_id, known_context FROM chat_sessions WHERE id = ?",
         (session_id,),
     ).fetchone()
     if row is None:
@@ -862,7 +910,10 @@ async def upload_statement(
 
     try:
         extracted = json.loads(row["extracted_profile"])
-        result = _handle_intake_turn(conn, session_id, extracted, user_content, user_id=user_id)
+        known_context = json.loads(row["known_context"])
+        result = _handle_intake_turn(
+            conn, session_id, extracted, user_content, user_id=user_id, known_context=known_context
+        )
     except RuntimeError as e:
         conn.close()
         raise HTTPException(status_code=503, detail=str(e))

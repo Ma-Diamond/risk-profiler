@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     email          TEXT NOT NULL UNIQUE,
     password_hash  TEXT NOT NULL,
     full_name      TEXT,
+    saved_profile  TEXT,   -- JSON: stable identity/financial fields (age, dependents, income, expenses, knowledge_score) from the client's most recently finalized profile — pre-filled into new sessions and confirmed rather than re-asked. Goal/horizon/amounts/risk-ratings are NOT saved here since those are specific to each profiling exercise, not stable facts about the client.
     created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
