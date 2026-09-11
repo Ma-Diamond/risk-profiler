@@ -40,3 +40,9 @@ jobs:
           region: us-east-1
           version_label: ${{ github.sha }}
           deployment_package: deploy.zip
+          # Makes re-running the workflow without a new commit safe —
+          # if a version with this label already exists (e.g. from a
+          # deploy attempt that failed for an unrelated reason, like
+          # the environment itself being broken), reuse it instead of
+          # erroring on a duplicate label.
+          use_existing_version_if_available: true
