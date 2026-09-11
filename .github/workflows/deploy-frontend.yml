@@ -1,0 +1,56 @@
+name: Deploy Frontend to S3/CloudFront
+
+# Only runs when frontend code actually changes, or manually via the
+# "Run workflow" button in the Actions tab (workflow_dispatch).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      # .env.production is gitignored (kept out of the repo since it's
+      # environment-specific config, not code) — CI recreates it fresh
+      # from a GitHub secret each run, right before building, so the
+      # real backend URL still ends up baked into the built JS.
+      - name: Create .env.production
+        run: echo "VITE_API_BASE=${{ secrets.VITE_API_BASE }}" > frontend/.env.production
+
+      - name: Build
+        run: cd frontend && npm run build
+
+      # Official AWS action — sets up credentials for the CLI commands
+      # below to use automatically, same two secrets already used by
+      # the backend deploy workflow.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # --delete removes anything in the bucket that's no longer in
+      # dist/ (e.g. an old JS bundle from a previous build) — keeps
+      # the bucket exactly matching your latest build, not accumulating.
+      - name: Sync build to S3
+        run: aws s3 sync frontend/dist/ s3://risk-profier-v1 --delete
+
+      # CloudFront caches aggressively — without this, visitors would
+      # keep seeing the previous version until the cache naturally
+      # expired. "/*" invalidates everything, simplest correct choice
+      # for a site this size.
+      - name: Invalidate CloudFront cache
+        run: aws cloudfront create-invalidation --distribution-id E3TGBB4CZ1EMSA --paths "/*"
