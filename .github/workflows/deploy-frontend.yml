@@ -46,11 +46,11 @@ jobs:
       # dist/ (e.g. an old JS bundle from a previous build) — keeps
       # the bucket exactly matching your latest build, not accumulating.
       - name: Sync build to S3
-        run: aws s3 sync frontend/dist/ s3://risk-profier-v1 --delete
+        run: aws s3 sync frontend/dist/ s3://risk-profiler-frontend-v1 --delete
 
       # CloudFront caches aggressively — without this, visitors would
       # keep seeing the previous version until the cache naturally
       # expired. "/*" invalidates everything, simplest correct choice
       # for a site this size.
       - name: Invalidate CloudFront cache
-        run: aws cloudfront create-invalidation --distribution-id E3TGBB4CZ1EMSA --paths "/*"
+        run: aws cloudfront create-invalidation --distribution-id E10WVYLWZ9R93W --paths "/*"
