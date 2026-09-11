@@ -4,7 +4,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* only inner scroll containers (chat, results) should scroll — the shell itself never grows past the viewport */
+  overflow: hidden;
 }
 
 .app-header {
@@ -15,9 +15,19 @@
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
-.app-header__brand { display: flex; align-items: center; gap: 10px; }
+.app-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
 
 .app-header__mark {
   width: 22px;
@@ -26,8 +36,102 @@
   background: linear-gradient(135deg, var(--accent), var(--band-4));
 }
 
-.app-header__name { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+.app-header__name { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--ink); }
 .app-header__product { font-size: 12.5px; color: var(--ink-muted); font-weight: 500; }
+
+.app-header__right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-header__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.app-header__account {
+  display: flex;
+  gap: 8px;
+}
+
+.app-header__nav-btn {
+  padding: 6px 14px;
+  font-size: 12.5px;
+}
+
+/* ---- hamburger nav menu ---- */
+
+.nav-menu { position: relative; }
+
+.nav-menu__trigger {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.nav-menu__bar {
+  width: 16px;
+  height: 2px;
+  background: var(--ink);
+  border-radius: 1px;
+}
+
+.nav-menu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.nav-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 170px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 21;
+}
+
+.nav-menu__item {
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.nav-menu__item:hover {
+  background: var(--surface-sunken);
+}
+
+.nav-menu__item--danger {
+  color: #B3261E;
+}
 
 /* ============ APP BODY (unified — chat area is always the same
    mounted element; only its wrapping classes and whether <main> is
@@ -71,7 +175,7 @@
 }
 
 .chat-dock__toggle {
-  display: none; /* desktop: chat is always visible, no toggle needed */
+  display: none;
 }
 
 .chat-area__body {
@@ -158,6 +262,31 @@
   border: 1px dashed var(--accent);
   font-size: 12.5px;
   text-align: center;
+}
+
+.chat-bubble--nudge {
+  align-self: stretch;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--band-3-wash);
+  border: 1px solid var(--band-3);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.chat-bubble--nudge p {
+  font-size: 13.5px;
+  color: var(--accent-ink);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.chat-nudge__cta {
+  align-self: flex-start;
+  padding: 8px 16px;
+  font-size: 12.5px;
 }
 .chat-bubble--typing { display: flex; gap: 4px; padding: 14px 16px; }
 
@@ -342,7 +471,7 @@
   }
 
   .results-shell__main {
-    padding: 20px 16px 100px; /* leave room for the collapsed chat bar */
+    padding: 20px 16px 100px;
   }
 
   .chat-area--docked {
@@ -356,7 +485,7 @@
     max-height: 70vh;
     box-shadow: 0 -8px 24px rgba(16, 32, 30, 0.12);
     z-index: 50;
-    transform: translateY(calc(100% - 52px)); /* only the toggle bar shows */
+    transform: translateY(calc(100% - 52px));
     transition: transform 280ms var(--ease);
   }
 
@@ -389,6 +518,8 @@
 
   .product-row { flex-direction: column; }
   .results-hero { grid-template-columns: 1fr; }
+
+  .account-grid, .investment-grid { grid-template-columns: 1fr; }
 }
 
 /* ---- risk rating widget (inline in chat) ---- */
@@ -404,22 +535,9 @@
   align-self: stretch;
 }
 
-.risk-widget__row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.risk-widget__question {
-  font-size: 13.5px;
-  color: var(--ink);
-  line-height: 1.4;
-}
-
-.risk-widget__scale {
-  display: flex;
-  gap: 6px;
-}
+.risk-widget__row { display: flex; flex-direction: column; gap: 8px; }
+.risk-widget__question { font-size: 13.5px; color: var(--ink); line-height: 1.4; }
+.risk-widget__scale { display: flex; gap: 6px; }
 
 .risk-widget__option {
   position: relative;
@@ -461,29 +579,13 @@
   color: white;
 }
 
-.risk-widget__scale-label {
-  font-size: 9.5px;
-  color: var(--ink-faint);
-  text-align: center;
-}
-
-.risk-widget__submit {
-  align-self: flex-end;
-}
+.risk-widget__scale-label { font-size: 9.5px; color: var(--ink-faint); text-align: center; }
+.risk-widget__submit { align-self: flex-end; }
 
 /* ---- summary modal ---- */
 
-.summary-modal {
-  max-width: 460px;
-}
-
-.summary-modal__body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 50vh;
-  overflow-y: auto;
-}
+.summary-modal { max-width: 460px; }
+.summary-modal__body { display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto; }
 
 .summary-modal__row {
   display: flex;
@@ -494,39 +596,11 @@
   font-size: 13px;
 }
 
-.summary-modal__label {
-  color: var(--ink-muted);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.summary-modal__value {
-  color: var(--ink);
-  text-align: right;
-}
+.summary-modal__label { color: var(--ink-muted); font-weight: 600; flex-shrink: 0; }
+.summary-modal__value { color: var(--ink); text-align: right; }
 
 @media (max-width: 480px) {
-  .risk-widget__scale-label {
-    display: none;
-  }
-}
-
-/* ---- header account nav ---- */
-
-.app-header__right {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.app-header__account {
-  display: flex;
-  gap: 8px;
-}
-
-.app-header__nav-btn {
-  padding: 6px 14px;
-  font-size: 12.5px;
+  .risk-widget__scale-label { display: none; }
 }
 
 /* ---- auth form ---- */
@@ -541,31 +615,10 @@
   min-height: 0;
 }
 
-.auth-card {
-  width: 100%;
-  max-width: 400px;
-  padding: 32px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
+.auth-card { width: 100%; max-width: 400px; padding: 32px 28px; display: flex; flex-direction: column; gap: 16px; }
 .auth-card h2 { font-size: 22px; }
-
-.auth-card__actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.auth-card__switch {
-  text-align: center;
-  font-size: 13px;
-  color: var(--ink-muted);
-  margin: 0;
-}
+.auth-card__actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; }
+.auth-card__switch { text-align: center; font-size: 13px; color: var(--ink-muted); margin: 0; }
 
 .auth-card__switch-link {
   background: none;
@@ -590,26 +643,9 @@
   min-height: 0;
 }
 
-.history-card {
-  width: 100%;
-  max-width: 640px;
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.history-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+.history-card { width: 100%; max-width: 640px; padding: 28px; display: flex; flex-direction: column; gap: 18px; }
+.history-card__header { display: flex; align-items: center; justify-content: space-between; }
+.history-list { display: flex; flex-direction: column; gap: 10px; }
 
 .history-row {
   display: flex;
@@ -621,25 +657,9 @@
   background: var(--surface);
 }
 
-.history-row__band-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.history-row__main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.history-row__meta {
-  font-size: 12px;
-  color: var(--ink-muted);
-}
+.history-row__band-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.history-row__main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.history-row__meta { font-size: 12px; color: var(--ink-muted); }
 
 .history-row__goals {
   font-size: 12px;
@@ -647,4 +667,119 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---- account page ---- */
+
+.account-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+/* ---- home page ---- */
+
+.home-shell {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 40px 24px 80px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.home-content {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.home-greeting { display: flex; flex-direction: column; gap: 6px; }
+.home-greeting h1 { font-size: 28px; }
+
+.home-section { display: flex; flex-direction: column; gap: 14px; }
+
+.home-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.home-section__link {
+  background: none;
+  border: none;
+  color: var(--accent-ink);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.account-grid, .investment-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.investment-grid { grid-template-columns: 1fr; }
+
+.account-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.account-card__type {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.account-card__name { font-size: 14px; }
+
+.account-card__balance {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+.account-card__balance--negative { color: #B3261E; }
+.account-card__number { font-size: 11.5px; color: var(--ink-faint); }
+
+.investment-card {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.investment-card__band-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.investment-card__main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.investment-card__meta { font-size: 12px; color: var(--ink-muted); }
+
+.home-empty {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.home-cta-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .account-grid {
+    grid-template-columns: 1fr;
+  }
 }

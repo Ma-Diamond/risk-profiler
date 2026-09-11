@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import RiskRatingWidget from "./RiskRatingWidget";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 /**
  * The chat is now the entire interaction — before results exist it
@@ -76,6 +76,19 @@ const ChatPanel = forwardRef(function ChatPanel(
     }
     if (data.recalculated_projections && data.recalculated_projections.length > 0) {
       onRecalculated(data.recalculated_projections);
+    }
+    if (data.nudge) {
+      const amount = data.nudge.surplus_amount;
+      const rounded = Math.round(amount).toLocaleString();
+      setMessages((m) => [
+        ...m,
+        {
+          role: "nudge",
+          text: `💰 Looks like you could have about R${rounded} left over this month.`,
+          ctaLabel: "Show me what that could grow into",
+          ctaMessage: `What would investing an extra R${amount} a month grow into?`,
+        },
+      ]);
     }
   };
 
@@ -180,14 +193,33 @@ const ChatPanel = forwardRef(function ChatPanel(
     }
   };
 
+  const simulateMonthEnd = () => {
+    if (!sessionId || sending) return;
+    sendRaw("It's the end of the month — can you check if I have any spare cash to invest?");
+  };
+
   return (
     <div className="chat-panel-wrap">
       <div className="chat-panel__messages" ref={scrollRef}>
-        {messages.map((m, i) => (
-          <div key={i} className={`chat-bubble chat-bubble--${m.role} ${m.isFile ? "chat-bubble--file" : ""}`}>
-            {m.text}
-          </div>
-        ))}
+        {messages.map((m, i) =>
+          m.role === "nudge" ? (
+            <div key={i} className="chat-bubble chat-bubble--nudge">
+              <p>{m.text}</p>
+              <button
+                type="button"
+                className="btn btn-primary chat-nudge__cta"
+                onClick={() => sendRaw(m.ctaMessage)}
+                disabled={sending}
+              >
+                {m.ctaLabel}
+              </button>
+            </div>
+          ) : (
+            <div key={i} className={`chat-bubble chat-bubble--${m.role} ${m.isFile ? "chat-bubble--file" : ""}`}>
+              {m.text}
+            </div>
+          )
+        )}
         {pendingRiskWidget && (
           <RiskRatingWidget
             questions={pendingRiskWidget.questions}
@@ -227,6 +259,17 @@ const ChatPanel = forwardRef(function ChatPanel(
               }}
             />
           </>
+        )}
+        {hasResults && (
+          <button
+            type="button"
+            className="btn btn-ghost chat-panel__upload-btn"
+            onClick={simulateMonthEnd}
+            disabled={!sessionId || sending}
+            title="Simulate month-end balance check"
+          >
+            💰
+          </button>
         )}
         <input
           className="text-input chat-panel__input"

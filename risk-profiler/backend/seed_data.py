@@ -15,6 +15,20 @@ project notes for exact column layouts):
 identifiers (not DB ids) — used only to wire the mapping and returns
 files to the right row when seeding. They can stay the same even if
 you rename a product or portfolio's display name.
+
+portfolio_returns.csv holds a TERM STRUCTURE (yield-curve style) per
+portfolio, not one flat rate: each row is one tenor point, and a
+portfolio normally has several rows, one per horizon_years — e.g.
+
+    portfolio_key,horizon_years,expected_return_pct,lower_return_pct,upper_return_pct,methodology
+    balanced_growth,1,7.0,4.0,10.0,
+    balanced_growth,5,9.0,5.0,13.0,
+    balanced_growth,10,10.0,3.0,17.0,
+    balanced_growth,20,11.0,2.0,20.0,
+
+A horizon between two stored tenors gets linearly interpolated at
+query time (see projections.resolve_curve_point) — this file only
+needs to hold the known curve points, not every possible horizon.
 """
 
 from __future__ import annotations
@@ -121,22 +135,33 @@ def _load_mapping() -> list[tuple[str, str]]:
     return mapping
 
 
-def _load_returns() -> tuple[dict[str, tuple[float, float, float]], dict[str, str]]:
+def _load_returns() -> tuple[dict[str, list[tuple[float, float, float, float]]], dict[str, str]]:
+    """Returns (curves_by_key, methodology_by_key). Each curve is a list
+    of (horizon_years, expected, lower, upper) points — a portfolio_key
+    can appear on multiple rows, one per tenor point."""
     rows = _read_csv("portfolio_returns.csv")
-    returns: dict[str, tuple[float, float, float]] = {}
+    curves: dict[str, list[tuple[float, float, float, float]]] = {}
     methodology_by_key: dict[str, str] = {}
     for i, r in enumerate(rows, start=2):
         try:
             key = r["portfolio_key"].strip()
-            returns[key] = (
+            point = (
+                float(r["horizon_years"]),
                 float(r["expected_return_pct"]),
                 float(r["lower_return_pct"]),
                 float(r["upper_return_pct"]),
             )
-            methodology_by_key[key] = _blank_to_none(r.get("methodology")) or DEFAULT_METHODOLOGY
+            curves.setdefault(key, []).append(point)
+            row_methodology = _blank_to_none(r.get("methodology"))
+            if row_methodology:
+                methodology_by_key[key] = row_methodology
         except (KeyError, ValueError) as e:
             raise ValueError(f"portfolio_returns.csv row {i}: {e}") from e
-    return returns, methodology_by_key
+
+    for key in curves:
+        curves[key].sort(key=lambda p: p[0])
+
+    return curves, methodology_by_key
 
 
 PORTFOLIOS: list[dict] = _load_portfolios()

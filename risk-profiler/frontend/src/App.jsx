@@ -4,12 +4,20 @@ import ResultsPanel from "./ResultsPanel";
 import SummaryModal from "./SummaryModal";
 import AuthForm from "./AuthForm";
 import ProfileHistory from "./ProfileHistory";
+import HomePage from "./HomePage";
+import AccountPage from "./AccountPage";
+import NavMenu from "./NavMenu";
 import "./tokens.css";
 import "./global.css";
 import "./layout.css";
 import "./animations.css";
 
-const API_BASE = "http://localhost:8000";
+// In production this is set at build time (see .env.production) to the
+// deployed backend's real URL, since frontend (CloudFront) and backend
+// (Elastic Beanstalk) are separate domains there. Locally it falls back
+// to "/api", which vite.config.js's dev-server proxy forwards to your
+// local backend on :8000 — npm run dev needs no configuration.
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const TOKEN_STORAGE_KEY = "risk_profiler_token";
 
 export default function App() {
@@ -23,8 +31,8 @@ export default function App() {
   // "chat" is the normal app body (intake or docked results); the
   // others replace it entirely while still leaving the chat mounted
   // underneath (hidden via CSS, not unmounted) so an in-progress
-  // conversation isn't lost by a trip to My Profiles and back.
-  const [view, setView] = useState("chat"); // "chat" | "login" | "signup" | "history"
+  // conversation isn't lost by a trip to another view and back.
+  const [view, setView] = useState("home"); // "home" | "chat" | "login" | "signup" | "history" | "account"
 
   const [authToken, setAuthToken] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
@@ -84,7 +92,7 @@ export default function App() {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     setAuthToken(token);
     setCurrentUser(user);
-    setView("chat");
+    setView("home");
     setResult(null);
     setRecalcMap({});
     // Login doesn't retroactively claim whatever anonymous session was
@@ -97,7 +105,7 @@ export default function App() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     setAuthToken(null);
     setCurrentUser(null);
-    setView("chat");
+    setView("home");
     setResult(null);
     setRecalcMap({});
     chatRef.current?.startFresh();
@@ -121,8 +129,17 @@ export default function App() {
       setRecalcMap({});
       setView("chat");
     } catch {
-      // Leave the user on the history view with nothing changed if this fails.
+      // Leave the user where they were, with nothing changed, if this fails.
     }
+  };
+
+  const handleStartNew = () => {
+    if (result !== null) {
+      setResult(null);
+      setRecalcMap({});
+      chatRef.current?.startFresh();
+    }
+    setView("chat");
   };
 
   const hasResults = result !== null;
@@ -134,34 +151,28 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="app-header__brand">
+        <button type="button" className="app-header__brand" onClick={() => setView("home")}>
           <span className="app-header__mark" aria-hidden="true" />
           <span className="app-header__name">Nedcore Bank</span>
-        </div>
+        </button>
         <div className="app-header__right">
           <span className="app-header__product">Risk Profile &amp; Portfolio Match</span>
-          {currentUser ? (
-            <div className="app-header__account">
-              <button className="btn btn-ghost app-header__nav-btn" onClick={() => setView("history")}>
-                My Profiles
-              </button>
-              <button className="btn btn-ghost app-header__nav-btn" onClick={handleLogout}>
-                Log out
-              </button>
-            </div>
-          ) : (
-            <div className="app-header__account">
-              <button className="btn btn-ghost app-header__nav-btn" onClick={() => setView("login")}>
-                Log in
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            className="app-header__avatar"
+            onClick={() => setView("account")}
+            aria-label="Account"
+            title="Account"
+          >
+            {currentUser?.full_name?.[0]?.toUpperCase() || "👤"}
+          </button>
+          <NavMenu currentUser={currentUser} onNavigate={setView} onLogout={handleLogout} />
         </div>
       </header>
 
       {/*
         Single persistent chat area — NOT re-mounted between phases or
-        when navigating to login/history and back. Only its wrapping
+        when navigating to another view and back. Only its wrapping
         classes (and whether <main> is present as a sibling) change, so
         the ChatPanel instance and its message history survive intake
         -> results, and a trip to another view, intact. Hidden via CSS
@@ -203,12 +214,32 @@ export default function App() {
         </aside>
       </div>
 
+      {view === "home" && (
+        <HomePage
+          currentUser={currentUser}
+          authToken={authToken}
+          onStartNew={handleStartNew}
+          onContinueProfile={handleContinueProfile}
+          onSeeAllProfiles={() => setView("history")}
+          onGoToLogin={() => setView("login")}
+        />
+      )}
+
+      {view === "account" && (
+        <AccountPage
+          currentUser={currentUser}
+          onBack={() => setView("home")}
+          onLogout={handleLogout}
+          onGoToLogin={() => setView("login")}
+        />
+      )}
+
       {view === "login" && (
         <AuthForm
           mode="login"
           onAuthenticated={handleAuthenticated}
           onSwitchMode={() => setView("signup")}
-          onCancel={() => setView("chat")}
+          onCancel={() => setView("home")}
         />
       )}
       {view === "signup" && (
@@ -216,14 +247,14 @@ export default function App() {
           mode="signup"
           onAuthenticated={handleAuthenticated}
           onSwitchMode={() => setView("login")}
-          onCancel={() => setView("chat")}
+          onCancel={() => setView("home")}
         />
       )}
       {view === "history" && (
         <ProfileHistory
           authToken={authToken}
           onContinue={handleContinueProfile}
-          onBack={() => setView("chat")}
+          onBack={() => setView("home")}
         />
       )}
 

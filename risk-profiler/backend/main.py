@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
+from datetime import datetime, timezone
 
 import ai_chat
 import auth
+import db
 import pdf_extract
 import projections
 import tax_estimate
-from db import get_connection, init_db
+from boto3.dynamodb.conditions import Key
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from matching import (
@@ -27,10 +30,20 @@ app = FastAPI(title="Risk Profiling API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    # Frontend (CloudFront) and backend (Elastic Beanstalk) are now on
+    # genuinely different domains, so this needs to actually allow
+    # cross-origin requests. Wildcard is safe here specifically because
+    # auth is a Bearer token in a header, not a cookie — there's no
+    # session to hijack via CSRF, which is the usual reason to lock
+    # this down tighter.
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ---------------------------------------------------------------------
@@ -41,21 +54,25 @@ app.add_middleware(
 # Endpoints that must work for guests (starting a chat, sending a
 # message) use this. require_user_id builds on it and raises 401 when
 # there's no valid identity — used for /auth/me and /profiles.
+#
+# "user_id" is now the user's email (DynamoDB's Users table is keyed
+# by email) — kept the name for minimal churn on everything that reads
+# it, the type just changed from int to str.
 # ---------------------------------------------------------------------
-def get_optional_user_id(authorization: str | None = Header(default=None)) -> int | None:
+def get_optional_user_id(authorization: str | None = Header(default=None)) -> str | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.removeprefix("Bearer ").strip()
     return auth.decode_token(token)
 
 
-def require_user_id(user_id: int | None = Depends(get_optional_user_id)) -> int:
+def require_user_id(user_id: str | None = Depends(get_optional_user_id)) -> str:
     if user_id is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user_id
 
 
-def _check_session_access(session_owner_id: int | None, requester_user_id: int | None) -> None:
+def _check_session_access(session_owner_id: str | None, requester_user_id: str | None) -> None:
     """A session with no owner (anonymous/guest) is accessible to anyone,
     matching pre-auth behaviour. An owned session is only accessible to
     its owner."""
@@ -129,6 +146,9 @@ class ProfileResult(BaseModel):
     goals_detail: str | None
     tax_bracket: str | None
     tax_bracket_estimated: bool
+    gross_monthly_income: float
+    monthly_expenses: float
+    monthly_contribution: float
     matched_portfolios: list[PortfolioOut]
 
 
@@ -164,15 +184,12 @@ class ChatTurnOut(BaseModel):
     recalculated_projections: list[RecalculatedProjectionOut] = []
     risk_widget: dict | None = None
     profile_summary: dict | None = None
+    nudge: dict | None = None
 
 
 class TaxEstimateOut(BaseModel):
     label: str
     rate: int
-
-
-class ExtractedUpdateIn(BaseModel):
-    extracted: dict
 
 
 class RiskRatingsIn(BaseModel):
@@ -191,7 +208,7 @@ class LoginIn(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: int
+    id: str  # the email — there's no separate numeric user id anymore
     email: str
     full_name: str | None
 
@@ -221,57 +238,82 @@ class ProfileDetailOut(BaseModel):
 
 
 # ---------------------------------------------------------------------
-# Row -> dataclass helpers
+# Item -> dataclass helpers
 # ---------------------------------------------------------------------
-def _row_to_product(row) -> Product:
+def _item_to_product(item: dict) -> Product:
     return Product(
-        id=row["id"],
-        name=row["name"],
-        provider=row["provider"],
-        tax_wrapper=row["tax_wrapper"],
-        min_initial_investment=row["min_initial_investment"],
-        min_monthly_investment=row["min_monthly_investment"],
-        annual_platform_fee_pct=row["annual_platform_fee_pct"],
-        advice_fee_pct=row["advice_fee_pct"],
-        min_term_years=row["min_term_years"],
-        description=row["description"],
-        spec_notes=row["spec_notes"] or "",
+        id=int(item["product_id"]),
+        name=item["name"],
+        provider=item["provider"],
+        tax_wrapper=item["tax_wrapper"],
+        min_initial_investment=db.num(item["min_initial_investment"]),
+        min_monthly_investment=db.num(item["min_monthly_investment"]),
+        annual_platform_fee_pct=db.num(item["annual_platform_fee_pct"]),
+        advice_fee_pct=db.num(item["advice_fee_pct"]),
+        min_term_years=db.num(item["min_term_years"]),
+        description=item["description"],
+        spec_notes=item.get("spec_notes") or "",
     )
 
 
-def _row_to_portfolio(row) -> Portfolio:
+def _item_to_portfolio(item: dict) -> Portfolio:
     return Portfolio(
-        id=row["id"],
-        name=row["name"],
-        provider=row["provider"],
-        risk_band=row["risk_band"],
-        max_equity_pct=row["max_equity_pct"],
-        min_horizon_years=row["min_horizon_years"],
-        liquidity_days=row["liquidity_days"],
-        reg28_compliant=row["reg28_compliant"],
-        min_knowledge_band=row["min_knowledge_band"],
-        requires_emergency_fund=row["requires_emergency_fund"],
-        underlying_fee_pct=row["underlying_fee_pct"],
-        description=row["description"],
+        id=int(item["portfolio_id"]),
+        name=item["name"],
+        provider=item["provider"],
+        risk_band=int(item["risk_band"]),
+        max_equity_pct=db.num(item["max_equity_pct"]),
+        min_horizon_years=db.num(item["min_horizon_years"]),
+        liquidity_days=int(item["liquidity_days"]),
+        reg28_compliant=bool(item["reg28_compliant"]),
+        min_knowledge_band=int(item["min_knowledge_band"]),
+        requires_emergency_fund=bool(item["requires_emergency_fund"]),
+        underlying_fee_pct=db.num(item["underlying_fee_pct"]),
+        description=item["description"],
     )
 
 
-def _load_mapping(conn) -> dict[int, set[int]]:
-    rows = conn.execute("SELECT product_id, portfolio_id FROM product_portfolio_mapping").fetchall()
-    mapping: dict[int, set[int]] = {}
-    for r in rows:
-        mapping.setdefault(r["portfolio_id"], set()).add(r["product_id"])
-    return mapping
+def _load_all_portfolios() -> list[dict]:
+    items: list[dict] = []
+    resp = db.PORTFOLIOS.scan()
+    items.extend(resp["Items"])
+    while "LastEvaluatedKey" in resp:
+        resp = db.PORTFOLIOS.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+        items.extend(resp["Items"])
+    return items
 
 
-def _load_returns(conn) -> dict[int, tuple[float, float, float]]:
-    rows = conn.execute(
-        "SELECT portfolio_id, expected_return_pct, lower_return_pct, upper_return_pct FROM portfolio_returns"
-    ).fetchall()
-    return {
-        r["portfolio_id"]: (r["expected_return_pct"], r["lower_return_pct"], r["upper_return_pct"])
-        for r in rows
-    }
+def _load_all_products() -> list[dict]:
+    items: list[dict] = []
+    resp = db.PRODUCTS.scan()
+    items.extend(resp["Items"])
+    while "LastEvaluatedKey" in resp:
+        resp = db.PRODUCTS.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+        items.extend(resp["Items"])
+    return items
+
+
+def _load_returns() -> dict[int, list[tuple[float, float, float, float]]]:
+    """portfolio_id -> its full return curve, sorted by horizon_years.
+    Each point is (horizon_years, expected, lower, upper) — see
+    projections.resolve_curve_point for how a specific horizon's rate
+    gets resolved from this. The catalog is small, so a full scan
+    (grouped client-side) is simpler than a query per portfolio."""
+    items: list[dict] = []
+    resp = db.PORTFOLIO_RETURNS.scan()
+    items.extend(resp["Items"])
+    while "LastEvaluatedKey" in resp:
+        resp = db.PORTFOLIO_RETURNS.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+        items.extend(resp["Items"])
+
+    curves: dict[int, list[tuple[float, float, float, float]]] = {}
+    for r in items:
+        curves.setdefault(int(r["portfolio_id"]), []).append(
+            (db.num(r["horizon_years"]), db.num(r["expected_return_pct"]), db.num(r["lower_return_pct"]), db.num(r["upper_return_pct"]))
+        )
+    for portfolio_id in curves:
+        curves[portfolio_id].sort(key=lambda p: p[0])
+    return curves
 
 
 def _parse_tax_rate(tax_bracket: str | None) -> int | None:
@@ -282,10 +324,10 @@ def _parse_tax_rate(tax_bracket: str | None) -> int | None:
 
 
 def _project(returns_by_portfolio, portfolio_id, fee_pct, initial_amount, monthly_amount, horizon_years) -> ProjectionOut | None:
-    rates = returns_by_portfolio.get(portfolio_id)
-    if rates is None:
+    curve = returns_by_portfolio.get(portfolio_id)
+    if not curve:
         return None
-    expected, lower, upper = rates
+    expected, lower, upper = projections.resolve_curve_point(curve, horizon_years)
     result = projections.project_range(
         initial_amount=initial_amount,
         monthly_amount=monthly_amount,
@@ -305,7 +347,7 @@ def _project(returns_by_portfolio, portfolio_id, fee_pct, initial_amount, monthl
 
 @app.on_event("startup")
 def startup() -> None:
-    init_db(seed=True)
+    db.init_db(seed=True)
 
 
 # ---------------------------------------------------------------------
@@ -314,18 +356,13 @@ def startup() -> None:
 # carries goals/notes/tax_bracket overrides gathered outside the
 # ClientProfileIn payload itself (from the chat's extracted_profile).
 # ---------------------------------------------------------------------
-def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | None = None) -> ProfileResult:
-    conn = get_connection()
-
+def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: str | None = None) -> ProfileResult:
     dependents = payload.dependents
     gross_monthly_income = payload.gross_monthly_income
     monthly_expenses = payload.monthly_expenses
     goals_detail: str | None = None
     explicit_tax_bracket: str | None = extracted_extra.get("tax_bracket")
 
-    # extracted_extra may carry more precise dependents/income/expenses
-    # than the payload if it was refined after the payload was built —
-    # only override where extracted_extra actually has a value.
     dependents = extracted_extra.get("dependents", dependents)
     gross_monthly_income = extracted_extra.get("gross_monthly_income", gross_monthly_income)
     monthly_expenses = extracted_extra.get("monthly_expenses", monthly_expenses)
@@ -354,41 +391,34 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | No
     )
     bands = compute_bands(client_input)
 
-    cur = conn.execute(
-        """
-        INSERT INTO clients (
-            user_id, full_name, age, dependents, gross_monthly_income, monthly_expenses,
-            emergency_fund_months, investment_horizon_years, investment_goal,
-            available_lump_sum, monthly_contribution, goals_detail, tax_bracket,
-            chat_session_id, tolerance_questionnaire, knowledge_score,
-            tolerance_band, capacity_band, horizon_band, governed_risk_band
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            user_id,
-            payload.full_name,
-            payload.age,
-            dependents,
-            gross_monthly_income,
-            monthly_expenses,
-            payload.emergency_fund_months,
-            payload.investment_horizon_years,
-            payload.investment_goal,
-            payload.available_lump_sum,
-            payload.monthly_contribution,
-            goals_detail,
-            tax_bracket,
-            payload.chat_session_id,
-            json.dumps(payload.tolerance_questionnaire),
-            payload.knowledge_score,
-            bands.tolerance_band,
-            bands.capacity_band,
-            bands.horizon_band,
-            bands.governed_risk_band,
-        ),
-    )
-    client_id = cur.lastrowid
-    conn.commit()
+    client_id = db.next_id("client_id")
+    client_item = {
+        "client_id": client_id,
+        "full_name": payload.full_name,
+        "age": payload.age,
+        "dependents": dependents,
+        "gross_monthly_income": db.dec(gross_monthly_income),
+        "monthly_expenses": db.dec(monthly_expenses),
+        "emergency_fund_months": db.dec(payload.emergency_fund_months),
+        "investment_horizon_years": db.dec(payload.investment_horizon_years),
+        "investment_goal": payload.investment_goal,
+        "available_lump_sum": db.dec(payload.available_lump_sum),
+        "monthly_contribution": db.dec(payload.monthly_contribution),
+        "goals_detail": goals_detail,
+        "tax_bracket": tax_bracket,
+        "tolerance_questionnaire": payload.tolerance_questionnaire,
+        "knowledge_score": payload.knowledge_score,
+        "tolerance_band": bands.tolerance_band,
+        "capacity_band": bands.capacity_band,
+        "horizon_band": bands.horizon_band,
+        "governed_risk_band": bands.governed_risk_band,
+        "created_at": _now_iso(),
+    }
+    if payload.chat_session_id is not None:
+        client_item["chat_session_id"] = payload.chat_session_id
+    if user_id is not None:
+        client_item["user_id"] = user_id
+    db.CLIENTS.put_item(Item=client_item)
 
     if user_id is not None:
         stable_fields = {
@@ -399,14 +429,14 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | No
             "monthly_expenses": monthly_expenses,
             "knowledge_score": payload.knowledge_score,
         }
-        conn.execute(
-            "UPDATE users SET saved_profile = ? WHERE id = ?",
-            (json.dumps(stable_fields), user_id),
+        db.USERS.update_item(
+            Key={"email": user_id},
+            UpdateExpression="SET saved_profile = :sp",
+            ExpressionAttributeValues={":sp": json.dumps(stable_fields)},
         )
-        conn.commit()
 
-    portfolio_rows = conn.execute("SELECT * FROM portfolios").fetchall()
-    portfolios = [_row_to_portfolio(r) for r in portfolio_rows]
+    portfolio_items_by_id = {int(item["portfolio_id"]): item for item in _load_all_portfolios()}
+    portfolios = [_item_to_portfolio(item) for item in portfolio_items_by_id.values()]
 
     matched = match_portfolios(
         portfolios,
@@ -416,22 +446,14 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | No
         payload.investment_goal,
     )
 
-    product_rows = conn.execute("SELECT * FROM products").fetchall()
-    all_products = [_row_to_product(r) for r in product_rows]
-    mapping = _load_mapping(conn)
-    returns_by_portfolio = _load_returns(conn)
-
-    conn.executemany(
-        "INSERT INTO recommendations (client_id, portfolio_id, rank) VALUES (?, ?, ?)",
-        [(client_id, p.id, i + 1) for i, p in enumerate(matched)],
-    )
+    all_products = [_item_to_product(item) for item in _load_all_products()]
+    returns_by_portfolio = _load_returns()
 
     prioritize_tax_efficient = tax_rate is not None and tax_rate >= 39
     portfolio_outputs: list[PortfolioOut] = []
-    product_recommendation_rows: list[tuple[int, int, int, int]] = []
 
     for portfolio in matched:
-        mapped_product_ids = mapping.get(portfolio.id, set())
+        mapped_product_ids = set(int(pid) for pid in portfolio_items_by_id[portfolio.id].get("product_ids", []))
         matched_products = match_products(
             all_products,
             portfolio,
@@ -441,9 +463,6 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | No
             payload.available_lump_sum,
             payload.monthly_contribution,
             prioritize_tax_efficient=prioritize_tax_efficient,
-        )
-        product_recommendation_rows.extend(
-            (client_id, prod.id, portfolio.id, i + 1) for i, prod in enumerate(matched_products)
         )
 
         reasons_by_id = build_product_reasons(
@@ -495,14 +514,6 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | No
             )
         )
 
-    if product_recommendation_rows:
-        conn.executemany(
-            "INSERT INTO product_recommendations (client_id, product_id, portfolio_id, rank) VALUES (?, ?, ?, ?)",
-            product_recommendation_rows,
-        )
-    conn.commit()
-    conn.close()
-
     return ProfileResult(
         client_id=client_id,
         tolerance_band=bands.tolerance_band,
@@ -513,6 +524,9 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: int | No
         goals_detail=goals_detail,
         tax_bracket=tax_bracket,
         tax_bracket_estimated=tax_bracket_estimated,
+        gross_monthly_income=gross_monthly_income,
+        monthly_expenses=monthly_expenses,
+        monthly_contribution=payload.monthly_contribution,
         matched_portfolios=portfolio_outputs,
     )
 
@@ -542,44 +556,37 @@ def _client_profile_from_extracted(extracted: dict, chat_session_id: int) -> Cli
 
 @app.post("/clients/profile", response_model=ProfileResult)
 def submit_profile(
-    payload: ClientProfileIn, user_id: int | None = Depends(get_optional_user_id)
+    payload: ClientProfileIn, user_id: str | None = Depends(get_optional_user_id)
 ) -> ProfileResult:
     """Direct entry point (not used by the chat flow, kept for testing
     / potential non-chat integrations). Pulls goals/tax_bracket
     overrides from the chat session if one is referenced."""
     extracted_extra: dict = {}
     if payload.chat_session_id is not None:
-        conn = get_connection()
-        row = conn.execute(
-            "SELECT extracted_profile, user_id FROM chat_sessions WHERE id = ?",
-            (payload.chat_session_id,),
-        ).fetchone()
-        conn.close()
-        if row is None:
+        item = db.CHAT_SESSIONS.get_item(Key={"session_id": payload.chat_session_id}).get("Item")
+        if item is None:
             raise HTTPException(status_code=404, detail="chat_session_id not found")
-        _check_session_access(row["user_id"], user_id)
-        extracted_extra = json.loads(row["extracted_profile"])
+        _check_session_access(item.get("user_id"), user_id)
+        extracted_extra = json.loads(item["extracted_profile"])
     return _finalize(payload, extracted_extra, user_id=user_id)
 
 
 @app.get("/portfolios", response_model=list[PortfolioOut])
 def list_portfolios() -> list[PortfolioOut]:
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM portfolios ORDER BY risk_band").fetchall()
-    conn.close()
+    items = sorted(_load_all_portfolios(), key=lambda i: int(i["risk_band"]))
     return [
         PortfolioOut(
-            id=r["id"],
-            name=r["name"],
-            provider=r["provider"],
-            risk_band=r["risk_band"],
-            max_equity_pct=r["max_equity_pct"],
-            min_horizon_years=r["min_horizon_years"],
-            liquidity_days=r["liquidity_days"],
-            reg28_compliant=bool(r["reg28_compliant"]),
-            description=r["description"],
+            id=int(i["portfolio_id"]),
+            name=i["name"],
+            provider=i["provider"],
+            risk_band=int(i["risk_band"]),
+            max_equity_pct=db.num(i["max_equity_pct"]),
+            min_horizon_years=db.num(i["min_horizon_years"]),
+            liquidity_days=int(i["liquidity_days"]),
+            reg28_compliant=bool(i["reg28_compliant"]),
+            description=i["description"],
         )
-        for r in rows
+        for i in items
     ]
 
 
@@ -592,68 +599,72 @@ def get_tax_estimate(monthly_income: float) -> TaxEstimateOut:
 # ---------------------------------------------------------------------
 # Chat — single endpoint, two phases
 # ---------------------------------------------------------------------
-def _load_saved_known_context(conn, user_id: int) -> dict:
+def _load_saved_known_context(user_id: str) -> dict:
     """A returning user's stable fields from their last finalized profile
     (or just their signup name, if they haven't finalized one yet) —
     pre-filled into a new session so those aren't asked from scratch."""
-    row = conn.execute(
-        "SELECT full_name, saved_profile FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
-    if row is None:
+    item = db.USERS.get_item(Key={"email": user_id}).get("Item")
+    if item is None:
         return {}
-    if row["saved_profile"]:
-        return json.loads(row["saved_profile"])
-    if row["full_name"]:
-        return {"full_name": row["full_name"]}
+    if item.get("saved_profile"):
+        return json.loads(item["saved_profile"])
+    if item.get("full_name"):
+        return {"full_name": item["full_name"]}
     return {}
 
 
 @app.post("/chat/sessions", response_model=ChatStartOut)
 def start_chat(
-    payload: ChatStartIn = ChatStartIn(), user_id: int | None = Depends(get_optional_user_id)
+    payload: ChatStartIn = ChatStartIn(), user_id: str | None = Depends(get_optional_user_id)
 ) -> ChatStartOut:
-    conn = get_connection()
-
     known_context = dict(payload.known_context)
     if user_id is not None:
-        known_context = {**known_context, **_load_saved_known_context(conn, user_id)}
+        known_context = {**known_context, **_load_saved_known_context(user_id)}
 
-    # Pre-seed extracted_profile too, not just known_context: these are
-    # values the client already gave us, not merely context for the
-    # model's phrasing — is_profile_complete() should already count them,
-    # and if the client confirms nothing changed, no further tool call is
-    # even needed to record them.
-    cur = conn.execute(
-        "INSERT INTO chat_sessions (user_id, extracted_profile, known_context) VALUES (?, ?, ?)",
-        (user_id, json.dumps(known_context), json.dumps(known_context)),
-    )
-    session_id = cur.lastrowid
-    conn.commit()
+    session_id = db.next_id("session_id")
+    session_item = {
+        "session_id": session_id,
+        "extracted_profile": json.dumps(known_context),
+        "known_context": json.dumps(known_context),
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+    if user_id is not None:
+        session_item["user_id"] = user_id
+    db.CHAT_SESSIONS.put_item(Item=session_item)
 
     opening = ai_chat.build_opening_message(known_context)
-    conn.execute(
-        "INSERT INTO chat_messages (session_id, role, content) VALUES (?, 'assistant', ?)",
-        (session_id, json.dumps(opening)),
-    )
-    conn.commit()
-    conn.close()
+    _put_message(session_id, "assistant", json.dumps(opening))
 
     return ChatStartOut(session_id=session_id, reply=opening)
 
 
-def _load_history(conn, session_id: int) -> list[dict]:
-    rows = conn.execute(
-        "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY id",
-        (session_id,),
-    ).fetchall()
-    return [{"role": r["role"], "content": json.loads(r["content"])} for r in rows]
+def _put_message(session_id: int, role: str, content_json: str) -> None:
+    """Sort key is timestamp + a short random suffix — gives ordered
+    retrieval via Query (no client-side sort needed) and avoids
+    same-timestamp collisions."""
+    sort_key = f"{_now_iso()}#{uuid.uuid4().hex[:8]}"
+    db.CHAT_MESSAGES.put_item(
+        Item={"session_id": session_id, "created_at": sort_key, "role": role, "content": content_json}
+    )
+
+
+def _load_history(session_id: int) -> list[dict]:
+    resp = db.CHAT_MESSAGES.query(KeyConditionExpression=Key("session_id").eq(session_id))
+    items = resp["Items"]
+    while "LastEvaluatedKey" in resp:
+        resp = db.CHAT_MESSAGES.query(
+            KeyConditionExpression=Key("session_id").eq(session_id),
+            ExclusiveStartKey=resp["LastEvaluatedKey"],
+        )
+        items.extend(resp["Items"])
+    return [{"role": r["role"], "content": json.loads(r["content"])} for r in items]
 
 
 def _handle_intake_turn(
-    conn, session_id: int, extracted: dict, user_content, user_id: int | None = None, known_context: dict | None = None
+    session_id: int, extracted: dict, user_content, user_id: str | None = None, known_context: dict | None = None
 ) -> ChatTurnOut:
-    history = _load_history(conn, session_id)
-    prior_len = len(history)
+    history = _load_history(session_id)
 
     finalized_holder: dict = {"result": None}
     risk_widget_holder: dict = {"data": None}
@@ -692,23 +703,20 @@ def _handle_intake_turn(
         history, user_content, system_prompt, ai_chat.INTAKE_TOOLS, executor
     )
 
-    new_messages = updated_history[prior_len:]
-    conn.executemany(
-        "INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)",
-        [(session_id, m["role"], json.dumps(m["content"])) for m in new_messages],
-    )
-    conn.execute(
-        "UPDATE chat_sessions SET extracted_profile = ?, updated_at = datetime('now') WHERE id = ?",
-        (json.dumps(extracted), session_id),
-    )
+    for m in updated_history[len(history):]:
+        _put_message(session_id, m["role"], json.dumps(m["content"]))
 
     result = finalized_holder["result"]
+    update_expr = "SET extracted_profile = :ep, updated_at = :ua"
+    expr_values = {":ep": json.dumps(extracted), ":ua": _now_iso()}
     if result is not None:
-        conn.execute(
-            "UPDATE chat_sessions SET finalized_result = ? WHERE id = ?",
-            (result.model_dump_json(), session_id),
-        )
-    conn.commit()
+        update_expr += ", finalized_result = :fr"
+        expr_values[":fr"] = result.model_dump_json()
+    db.CHAT_SESSIONS.update_item(
+        Key={"session_id": session_id},
+        UpdateExpression=update_expr,
+        ExpressionAttributeValues=expr_values,
+    )
 
     complete, missing = ai_chat.is_profile_complete(extracted)
     return ChatTurnOut(
@@ -722,14 +730,29 @@ def _handle_intake_turn(
     )
 
 
-def _handle_post_results_turn(conn, session_id: int, stored_result: dict, user_content) -> ChatTurnOut:
-    history = _load_history(conn, session_id)
-    prior_len = len(history)
+SURPLUS_NUDGE_THRESHOLD = 200  # Rand — below this, not worth flagging as a meaningful surplus
 
-    returns_by_portfolio = _load_returns(conn)
+
+def _handle_post_results_turn(session_id: int, stored_result: dict, user_content) -> ChatTurnOut:
+    history = _load_history(session_id)
+
+    returns_by_portfolio = _load_returns()
     recalculated: list[RecalculatedProjectionOut] = []
+    nudge_holder: dict = {"data": None}
 
     def executor(tool_name: str, tool_input: dict) -> dict:
+        if tool_name == "check_monthly_surplus":
+            income = stored_result.get("gross_monthly_income")
+            expenses = stored_result.get("monthly_expenses")
+            committed = stored_result.get("monthly_contribution", 0) or 0
+            if income is None or expenses is None:
+                return {"status": "unavailable"}
+            surplus = round(income - expenses - committed, 2)
+            if surplus <= SURPLUS_NUDGE_THRESHOLD:
+                return {"status": "no_meaningful_surplus", "surplus_amount": surplus}
+            nudge_holder["data"] = {"surplus_amount": surplus}
+            return {"status": "surplus_found", "surplus_amount": surplus}
+
         if tool_name != "recalculate_investment_projection":
             return {"status": "unknown_tool"}
 
@@ -777,59 +800,50 @@ def _handle_post_results_turn(conn, session_id: int, stored_result: dict, user_c
         history, user_content, system_prompt, ai_chat.POST_RESULTS_TOOLS, executor
     )
 
-    new_messages = updated_history[prior_len:]
-    conn.executemany(
-        "INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)",
-        [(session_id, m["role"], json.dumps(m["content"])) for m in new_messages],
+    for m in updated_history[len(history):]:
+        _put_message(session_id, m["role"], json.dumps(m["content"]))
+
+    db.CHAT_SESSIONS.update_item(
+        Key={"session_id": session_id},
+        UpdateExpression="SET updated_at = :ua",
+        ExpressionAttributeValues={":ua": _now_iso()},
     )
-    conn.execute(
-        "UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?", (session_id,)
-    )
-    conn.commit()
 
     return ChatTurnOut(
         reply=reply,
         ready_to_finalize=True,
         recalculated_projections=recalculated,
+        nudge=nudge_holder["data"],
     )
 
 
 @app.post("/chat/sessions/{session_id}/messages", response_model=ChatTurnOut)
 def send_chat_message(
-    session_id: int, payload: ChatMessageIn, user_id: int | None = Depends(get_optional_user_id)
+    session_id: int, payload: ChatMessageIn, user_id: str | None = Depends(get_optional_user_id)
 ) -> ChatTurnOut:
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT extracted_profile, finalized_result, user_id, known_context FROM chat_sessions WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    if row is None:
-        conn.close()
+    item = db.CHAT_SESSIONS.get_item(Key={"session_id": session_id}).get("Item")
+    if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
-    _check_session_access(row["user_id"], user_id)
+    _check_session_access(item.get("user_id"), user_id)
 
     try:
-        if row["finalized_result"]:
-            result = _handle_post_results_turn(
-                conn, session_id, json.loads(row["finalized_result"]), payload.message
-            )
+        if item.get("finalized_result"):
+            result = _handle_post_results_turn(session_id, json.loads(item["finalized_result"]), payload.message)
         else:
-            extracted = json.loads(row["extracted_profile"])
-            known_context = json.loads(row["known_context"])
+            extracted = json.loads(item["extracted_profile"])
+            known_context = json.loads(item["known_context"])
             result = _handle_intake_turn(
-                conn, session_id, extracted, payload.message, user_id=user_id, known_context=known_context
+                session_id, extracted, payload.message, user_id=user_id, known_context=known_context
             )
     except RuntimeError as e:
-        conn.close()
         raise HTTPException(status_code=503, detail=str(e))
 
-    conn.close()
     return result
 
 
 @app.post("/chat/sessions/{session_id}/risk-ratings", response_model=ChatTurnOut)
 def submit_risk_ratings(
-    session_id: int, payload: RiskRatingsIn, user_id: int | None = Depends(get_optional_user_id)
+    session_id: int, payload: RiskRatingsIn, user_id: str | None = Depends(get_optional_user_id)
 ) -> ChatTurnOut:
     """The risk-ratings widget's submit button hits this directly rather
     than going through the normal chat message endpoint — the 5 numbers
@@ -839,53 +853,39 @@ def submit_risk_ratings(
     if len(payload.ratings) != 5 or not all(1 <= r <= 5 for r in payload.ratings):
         raise HTTPException(status_code=422, detail="ratings must be exactly 5 integers, each 1-5")
 
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT extracted_profile, finalized_result, user_id, known_context FROM chat_sessions WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    if row is None:
-        conn.close()
+    item = db.CHAT_SESSIONS.get_item(Key={"session_id": session_id}).get("Item")
+    if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
-    _check_session_access(row["user_id"], user_id)
-    if row["finalized_result"]:
-        conn.close()
+    _check_session_access(item.get("user_id"), user_id)
+    if item.get("finalized_result"):
         raise HTTPException(status_code=400, detail="This session's profile is already finalized.")
 
-    extracted = json.loads(row["extracted_profile"])
+    extracted = json.loads(item["extracted_profile"])
     extracted["tolerance_questionnaire"] = payload.ratings
-    known_context = json.loads(row["known_context"])
+    known_context = json.loads(item["known_context"])
     synthetic_message = f"[The client submitted their risk ratings via the widget: {payload.ratings}]"
 
     try:
         result = _handle_intake_turn(
-            conn, session_id, extracted, synthetic_message, user_id=user_id, known_context=known_context
+            session_id, extracted, synthetic_message, user_id=user_id, known_context=known_context
         )
     except RuntimeError as e:
-        conn.close()
         raise HTTPException(status_code=503, detail=str(e))
 
-    conn.close()
     return result
 
 
 @app.post("/chat/sessions/{session_id}/upload-statement", response_model=ChatTurnOut)
 async def upload_statement(
-    session_id: int, file: UploadFile = File(...), user_id: int | None = Depends(get_optional_user_id)
+    session_id: int, file: UploadFile = File(...), user_id: str | None = Depends(get_optional_user_id)
 ) -> ChatTurnOut:
     """Intake-only — used to help estimate income/expenses before a
     profile is finalized."""
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT extracted_profile, finalized_result, user_id, known_context FROM chat_sessions WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    if row is None:
-        conn.close()
+    item = db.CHAT_SESSIONS.get_item(Key={"session_id": session_id}).get("Item")
+    if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
-    _check_session_access(row["user_id"], user_id)
-    if row["finalized_result"]:
-        conn.close()
+    _check_session_access(item.get("user_id"), user_id)
+    if item.get("finalized_result"):
         raise HTTPException(
             status_code=400,
             detail="This session's profile is already finalized — statement upload is only for intake.",
@@ -895,7 +895,6 @@ async def upload_statement(
     try:
         statement_text = pdf_extract.extract_text(pdf_bytes)
     except ValueError as e:
-        conn.close()
         raise HTTPException(status_code=422, detail=str(e))
 
     user_content = [
@@ -909,44 +908,36 @@ async def upload_statement(
     ]
 
     try:
-        extracted = json.loads(row["extracted_profile"])
-        known_context = json.loads(row["known_context"])
+        extracted = json.loads(item["extracted_profile"])
+        known_context = json.loads(item["known_context"])
         result = _handle_intake_turn(
-            conn, session_id, extracted, user_content, user_id=user_id, known_context=known_context
+            session_id, extracted, user_content, user_id=user_id, known_context=known_context
         )
     except RuntimeError as e:
-        conn.close()
         raise HTTPException(status_code=503, detail=str(e))
 
-    conn.close()
     return result
 
 
 @app.get("/chat/sessions/{session_id}/history", response_model=list[ChatMessageOut])
 def get_chat_history(
-    session_id: int, user_id: int | None = Depends(get_optional_user_id)
+    session_id: int, user_id: str | None = Depends(get_optional_user_id)
 ) -> list[ChatMessageOut]:
     """Reconstructs a clean, human-readable transcript for reopening a
     session — the raw stored rows include tool_use/tool_result plumbing
     that was never meant to be displayed. Used when continuing a past
     profile: the chat area needs something to show besides a blank
     screen even though the underlying session already has full history."""
-    conn = get_connection()
-    row = conn.execute("SELECT user_id FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
-    if row is None:
-        conn.close()
+    item = db.CHAT_SESSIONS.get_item(Key={"session_id": session_id}).get("Item")
+    if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
-    _check_session_access(row["user_id"], user_id)
+    _check_session_access(item.get("user_id"), user_id)
 
-    raw_rows = conn.execute(
-        "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY id",
-        (session_id,),
-    ).fetchall()
-    conn.close()
+    raw_history = _load_history(session_id)
 
     display: list[ChatMessageOut] = []
-    for r in raw_rows:
-        content = json.loads(r["content"])
+    for r in raw_history:
+        content = r["content"]
         role = r["role"]
 
         if isinstance(content, str):
@@ -978,104 +969,96 @@ def get_chat_history(
 # ---------------------------------------------------------------------
 @app.post("/auth/register", response_model=AuthOut)
 def register(payload: RegisterIn) -> AuthOut:
-    conn = get_connection()
-    existing = conn.execute("SELECT id FROM users WHERE email = ?", (payload.email,)).fetchone()
+    existing = db.USERS.get_item(Key={"email": payload.email}).get("Item")
     if existing is not None:
-        conn.close()
         raise HTTPException(status_code=409, detail="An account with this email already exists")
 
     password_hash = auth.hash_password(payload.password)
-    cur = conn.execute(
-        "INSERT INTO users (email, password_hash, full_name) VALUES (?, ?, ?)",
-        (payload.email, password_hash, payload.full_name),
+    db.USERS.put_item(
+        Item={
+            "email": payload.email,
+            "password_hash": password_hash,
+            "full_name": payload.full_name,
+            "created_at": _now_iso(),
+        }
     )
-    user_id = cur.lastrowid
-    conn.commit()
-    conn.close()
 
-    token = auth.create_token(user_id)
+    token = auth.create_token(payload.email)
     return AuthOut(
         token=token,
-        user=UserOut(id=user_id, email=payload.email, full_name=payload.full_name),
+        user=UserOut(id=payload.email, email=payload.email, full_name=payload.full_name),
     )
 
 
 @app.post("/auth/login", response_model=AuthOut)
 def login(payload: LoginIn) -> AuthOut:
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT id, email, password_hash, full_name FROM users WHERE email = ?",
-        (payload.email,),
-    ).fetchone()
-    conn.close()
+    item = db.USERS.get_item(Key={"email": payload.email}).get("Item")
 
-    if row is None or not auth.verify_password(payload.password, row["password_hash"]):
+    if item is None or not auth.verify_password(payload.password, item["password_hash"]):
         # Same message for "no such user" and "wrong password" — never
         # reveal which one it was, that's an account-enumeration leak.
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
-    token = auth.create_token(row["id"])
+    token = auth.create_token(item["email"])
     return AuthOut(
         token=token,
-        user=UserOut(id=row["id"], email=row["email"], full_name=row["full_name"]),
+        user=UserOut(id=item["email"], email=item["email"], full_name=item.get("full_name")),
     )
 
 
 @app.get("/auth/me", response_model=UserOut)
-def get_me(user_id: int = Depends(require_user_id)) -> UserOut:
-    conn = get_connection()
-    row = conn.execute("SELECT id, email, full_name FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
-    if row is None:
+def get_me(user_id: str = Depends(require_user_id)) -> UserOut:
+    item = db.USERS.get_item(Key={"email": user_id}).get("Item")
+    if item is None:
         raise HTTPException(status_code=401, detail="User no longer exists")
-    return UserOut(id=row["id"], email=row["email"], full_name=row["full_name"])
+    return UserOut(id=item["email"], email=item["email"], full_name=item.get("full_name"))
 
 
 # ---------------------------------------------------------------------
 # Profile history
 # ---------------------------------------------------------------------
 @app.get("/profiles", response_model=list[ProfileSummaryOut])
-def list_profiles(user_id: int = Depends(require_user_id)) -> list[ProfileSummaryOut]:
-    conn = get_connection()
-    rows = conn.execute(
-        """SELECT id, chat_session_id, created_at, governed_risk_band, investment_goal, goals_detail
-           FROM clients WHERE user_id = ? ORDER BY created_at DESC""",
-        (user_id,),
-    ).fetchall()
-    conn.close()
+def list_profiles(user_id: str = Depends(require_user_id)) -> list[ProfileSummaryOut]:
+    resp = db.CLIENTS.query(
+        IndexName="by-user",
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        ScanIndexForward=False,  # newest first
+    )
+    items = resp["Items"]
+    while "LastEvaluatedKey" in resp:
+        resp = db.CLIENTS.query(
+            IndexName="by-user",
+            KeyConditionExpression=Key("user_id").eq(user_id),
+            ScanIndexForward=False,
+            ExclusiveStartKey=resp["LastEvaluatedKey"],
+        )
+        items.extend(resp["Items"])
+
     return [
         ProfileSummaryOut(
-            client_id=r["id"],
-            chat_session_id=r["chat_session_id"],
-            created_at=r["created_at"],
-            governed_risk_band=r["governed_risk_band"],
-            investment_goal=r["investment_goal"],
-            goals_detail=r["goals_detail"],
+            client_id=int(i["client_id"]),
+            chat_session_id=int(i["chat_session_id"]) if i.get("chat_session_id") is not None else None,
+            created_at=i["created_at"],
+            governed_risk_band=int(i["governed_risk_band"]),
+            investment_goal=i["investment_goal"],
+            goals_detail=i.get("goals_detail"),
         )
-        for r in rows
+        for i in items
     ]
 
 
 @app.get("/profiles/{client_id}", response_model=ProfileDetailOut)
-def get_profile(client_id: int, user_id: int = Depends(require_user_id)) -> ProfileDetailOut:
-    conn = get_connection()
-    client_row = conn.execute(
-        "SELECT user_id, chat_session_id FROM clients WHERE id = ?", (client_id,)
-    ).fetchone()
-    if client_row is None:
-        conn.close()
+def get_profile(client_id: int, user_id: str = Depends(require_user_id)) -> ProfileDetailOut:
+    client_item = db.CLIENTS.get_item(Key={"client_id": client_id}).get("Item")
+    if client_item is None:
         raise HTTPException(status_code=404, detail="profile not found")
-    if client_row["user_id"] != user_id:
-        conn.close()
+    if client_item.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to access this profile")
 
-    chat_session_id = client_row["chat_session_id"]
-    session_row = conn.execute(
-        "SELECT finalized_result FROM chat_sessions WHERE id = ?", (chat_session_id,)
-    ).fetchone()
-    conn.close()
-    if session_row is None or not session_row["finalized_result"]:
+    chat_session_id = int(client_item["chat_session_id"])
+    session_item = db.CHAT_SESSIONS.get_item(Key={"session_id": chat_session_id}).get("Item")
+    if session_item is None or not session_item.get("finalized_result"):
         raise HTTPException(status_code=404, detail="stored result not found for this profile")
 
-    profile_result = ProfileResult.model_validate_json(session_row["finalized_result"])
+    profile_result = ProfileResult.model_validate_json(session_item["finalized_result"])
     return ProfileDetailOut(chat_session_id=chat_session_id, profile_result=profile_result)

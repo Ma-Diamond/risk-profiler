@@ -404,7 +404,19 @@ RECALCULATE_TOOL = {
     },
 }
 
-POST_RESULTS_TOOLS = [RECALCULATE_TOOL]
+CHECK_SURPLUS_TOOL = {
+    "name": "check_monthly_surplus",
+    "description": (
+        "Checks whether the client has meaningful spare cash this month, based on "
+        "their known income, expenses, and already-committed monthly investment — "
+        "computed deterministically, don't estimate this yourself. Call this when "
+        "the client asks you to check their balance, simulate month-end, or see if "
+        "they have room to invest more right now."
+    ),
+    "input_schema": {"type": "object", "properties": {}},
+}
+
+POST_RESULTS_TOOLS = [RECALCULATE_TOOL, CHECK_SURPLUS_TOOL]
 
 
 def build_post_results_system_prompt(finalized_result: dict) -> str:
@@ -429,7 +441,16 @@ plain, encouraging language. Keep replies short — two or three sentences plus 
 numbers. You can also answer general questions about the products, fees, or their risk \
 band using the information above. If asked to change something fundamental about their \
 profile (income, goal, age, etc.), explain that they'd need to go back and edit their \
-details rather than changing it here."""
+details rather than changing it here.
+
+CHECKING FOR SPARE CASH: if the client asks you to check their balance, simulate \
+month-end, or see if they have room to invest more, call check_monthly_surplus — this \
+is computed deterministically from their actual income, expenses, and committed \
+monthly investment, never estimate it yourself. If it finds a meaningful surplus, \
+explain it warmly and suggest putting it to work — mention their top pick or a \
+no-lock-in product if one exists among their matches, and note they can ask what that \
+extra amount would grow into. If there's nothing meaningful this time, say so plainly \
+rather than manufacturing urgency where there isn't any."""
 
 
 # ---------------------------------------------------------------------

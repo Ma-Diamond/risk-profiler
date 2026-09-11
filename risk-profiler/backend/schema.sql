@@ -126,18 +126,28 @@ CREATE TABLE IF NOT EXISTS product_portfolio_mapping (
 
 -- ---------------------------------------------------------------------
 -- PORTFOLIO RETURNS
--- Expected annual return + a rough confidence interval per portfolio,
--- produced by a separate research/actuarial process (NOT this app).
--- Values here are illustrative placeholders — see seed_data.py.
+-- A term structure (yield-curve style) per portfolio, not a single
+-- flat rate: each row is one tenor point (horizon_years, expected,
+-- lower, upper), produced by a separate research/actuarial process
+-- (NOT this app). The rate at a given horizon is already the
+-- annualized rate for holding to that horizon — projections for a
+-- horizon between two stored tenors linearly interpolate between
+-- them (see projections.resolve_curve_point). Values here are
+-- illustrative placeholders — see seed_data.py.
+-- UNIQUE(portfolio_id, horizon_years) so a computation job can safely
+-- re-run and upsert per tenor point rather than accumulating stale
+-- rows each time it runs.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS portfolio_returns (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
     portfolio_id          INTEGER NOT NULL REFERENCES portfolios(id),
+    horizon_years         REAL NOT NULL,
     expected_return_pct   REAL NOT NULL,
     lower_return_pct      REAL NOT NULL,
     upper_return_pct      REAL NOT NULL,
     methodology           TEXT,
-    updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(portfolio_id, horizon_years)
 );
 
 -- ---------------------------------------------------------------------
