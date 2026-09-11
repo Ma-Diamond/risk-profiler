@@ -11,7 +11,7 @@ INTAKE phase (before the client has confirmed):
     double-checks completeness before honouring it (see
     is_profile_complete) — a premature or mistaken call gets a
     "missing_fields" tool_result back instead of silently finalizing
-    an incomplete profile.
+    an incomplete profile. 
 
 POST-RESULTS phase (after confirm_and_proceed has succeeded):
   - `recalculate_investment_projection` — "what if I invest more /
