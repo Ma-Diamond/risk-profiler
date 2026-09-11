@@ -1,0 +1,43 @@
+name: Deploy Backend to Elastic Beanstalk
+
+# Only runs when backend code actually changes, or manually via the
+# "Run workflow" button in the Actions tab (workflow_dispatch).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same exclusions as the manual zip we made by hand before —
+      # local venv, caches, and the now-unused SQLite files never need
+      # to ship. The returns-update script is excluded too since it
+      # runs separately, not as part of the web app.
+      - name: Zip backend for deployment
+        run: |
+          cd backend
+          zip -r ../deploy.zip . -x "venv/*" "__pycache__/*" "*.pyc" "*.db" "scripts/*"
+
+      # Uses a well-established community action (30M+ downloads) that
+      # wraps the AWS Elastic Beanstalk API: creates a new application
+      # version from the zip and tells your existing environment to
+      # deploy it — this does NOT create or reconfigure the
+      # environment itself, it only ships new code to what's already
+      # there (env vars, IAM role, etc. are untouched).
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v22
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # FILL IN — see the two TODOs below
+          application_name: risk-profiler # TODO: confirm this matches your EB application's actual name
+          environment_name: risk-profiler-env # TODO: replace with your EB environment's actual name (EB console, top of the environment page)
+          region: us-east-1 # TODO: replace with whatever region you actually deployed in
+          version_label: ${{ github.sha }}
+          deployment_package: deploy.zip
