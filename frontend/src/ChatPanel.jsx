@@ -3,6 +3,13 @@ import RiskRatingWidget from "./RiskRatingWidget";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
+// Browser-native speech-to-text — Chrome/Edge support this well,
+// Safari partially, Firefox not at all. No API key, no backend
+// involvement; when unsupported, the mic button just doesn't render
+// rather than showing something broken.
+const SpeechRecognitionAPI =
+  typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+
 /**
  * The chat is now the entire interaction — before results exist it
  * fills the screen collecting the client's full profile; after
@@ -29,8 +36,12 @@ const ChatPanel = forwardRef(function ChatPanel(
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [pendingRiskWidget, setPendingRiskWidget] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const audioRef = useRef(null);
 
   const authHeaders = () => (authToken ? { Authorization: `Bearer ${authToken}` } : {});
 
@@ -56,8 +67,78 @@ const ChatPanel = forwardRef(function ChatPanel(
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, pendingRiskWidget]);
 
+  // Stop any in-progress recognition or playback if the component goes away.
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      audioRef.current?.pause();
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (!SpeechRecognitionAPI) return;
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setInput(transcript);
+    };
+
+    // Covers both a real error (e.g. mic permission denied) and the
+    // normal "stopped listening" case — either way we're done.
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+      setIsListening(true);
+    } catch {
+      setIsListening(false);
+    }
+  };
+
+  // Natural-sounding voice output via the backend's Polly-backed /tts
+  // endpoint — deliberately not the browser's built-in speechSynthesis,
+  // which sounds noticeably more robotic. Off by default (a full chat
+  // narrated aloud on every turn isn't always wanted); the speaker
+  // toggle in the composer turns it on.
+  const speakText = async (text) => {
+    if (!voiceOutputEnabled || !text) return;
+    try {
+      audioRef.current?.pause();
+      const res = await fetch(`${API_BASE}/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return; // voice output is a nice-to-have; fail silently rather than surface an error
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      audioRef.current = audio;
+      audio.play();
+    } catch {
+      // same reasoning — don't let a voice-output hiccup interrupt the chat
+    }
+  };
+
   const handleTurnResponse = (data) => {
     setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
+    speakText(data.reply);
     if (data.risk_widget) {
       setPendingRiskWidget(data.risk_widget);
     }
@@ -198,6 +279,13 @@ const ChatPanel = forwardRef(function ChatPanel(
     sendRaw("It's the end of the month — can you check if I have any spare cash to invest?");
   };
 
+  const toggleVoiceOutput = () => {
+    setVoiceOutputEnabled((v) => {
+      if (v) audioRef.current?.pause(); // turning off mid-speech stops it immediately
+      return !v;
+    });
+  };
+
   return (
     <div className="chat-panel-wrap">
       <div className="chat-panel__messages" ref={scrollRef}>
@@ -271,9 +359,30 @@ const ChatPanel = forwardRef(function ChatPanel(
             💰
           </button>
         )}
+        <button
+          type="button"
+          className={`btn btn-ghost chat-panel__voice-toggle ${voiceOutputEnabled ? "chat-panel__voice-toggle--active" : ""}`}
+          onClick={toggleVoiceOutput}
+          title={voiceOutputEnabled ? "Turn off spoken replies" : "Turn on spoken replies"}
+        >
+          {voiceOutputEnabled ? "🔊" : "🔇"}
+        </button>
+        {SpeechRecognitionAPI && (
+          <button
+            type="button"
+            className={`btn btn-ghost chat-panel__mic-btn ${isListening ? "chat-panel__mic-btn--active" : ""}`}
+            onClick={toggleListening}
+            disabled={!sessionId || sending}
+            title={isListening ? "Stop listening" : "Speak your message"}
+          >
+            {isListening ? "🔴" : "🎤"}
+          </button>
+        )}
         <input
           className="text-input chat-panel__input"
-          placeholder={hasResults ? "Ask a question, e.g. what if I invest more?" : "Type your answer…"}
+          placeholder={
+            isListening ? "Listening…" : hasResults ? "Ask a question, e.g. what if I invest more?" : "Type your answer…"
+          }
           value={input}
           disabled={!sessionId || sending}
           onChange={(e) => setInput(e.target.value)}

@@ -24,6 +24,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState(null);
   const [result, setResult] = useState(null);
   const [recalcMap, setRecalcMap] = useState({});
+  const [accounts, setAccounts] = useState([]);
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const [activeSummary, setActiveSummary] = useState(null);
   const chatRef = useRef(null);
@@ -66,6 +67,7 @@ export default function App() {
   const handleFinalized = (profileResult) => {
     setResult(profileResult);
     setRecalcMap({});
+    setAccounts([]); // a freshly finalized profile has no opened accounts yet
   };
 
   const handleRecalculated = (list) => {
@@ -83,6 +85,10 @@ export default function App() {
     setSheetExpanded(true);
   };
 
+  const handleAccountOpened = (account) => {
+    setAccounts((prev) => [...prev, account]);
+  };
+
   const handleSummaryConfirm = () => {
     setActiveSummary(null);
     chatRef.current?.sendProgrammaticMessage("Yes, that all looks right — please proceed.");
@@ -95,6 +101,7 @@ export default function App() {
     setView("home");
     setResult(null);
     setRecalcMap({});
+    setAccounts([]);
     // Login doesn't retroactively claim whatever anonymous session was
     // active — start clean under the now-authenticated identity so
     // there's never an ambiguous ownership state.
@@ -108,6 +115,7 @@ export default function App() {
     setView("home");
     setResult(null);
     setRecalcMap({});
+    setAccounts([]);
     chatRef.current?.startFresh();
   };
 
@@ -127,6 +135,7 @@ export default function App() {
       chatRef.current?.resumeSession(profileData.chat_session_id, history);
       setResult(profileData.profile_result);
       setRecalcMap({});
+      setAccounts(profileData.accounts || []);
       setView("chat");
     } catch {
       // Leave the user where they were, with nothing changed, if this fails.
@@ -137,6 +146,7 @@ export default function App() {
     if (result !== null) {
       setResult(null);
       setRecalcMap({});
+      setAccounts([]);
       chatRef.current?.startFresh();
     }
     setView("chat");
@@ -184,7 +194,13 @@ export default function App() {
       >
         {hasResults && (
           <main className="results-shell__main">
-            <ResultsPanel result={result} recalculatedProjections={recalcMap} />
+            <ResultsPanel
+              result={result}
+              recalculatedProjections={recalcMap}
+              accounts={accounts}
+              authToken={authToken}
+              onAccountOpened={handleAccountOpened}
+            />
           </main>
         )}
 

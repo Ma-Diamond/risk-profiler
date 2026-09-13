@@ -783,3 +783,136 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- voice input mic button ---- */
+
+.chat-panel__mic-btn {
+  padding: 10px 12px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.chat-panel__mic-btn--active {
+  border-color: #B3261E;
+  color: #B3261E;
+  animation: mic-pulse 1.1s infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
+
+/* ---- voice output toggle ---- */
+
+.chat-panel__voice-toggle {
+  padding: 10px 12px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.chat-panel__voice-toggle--active {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-wash);
+}
+
+/* ---- investment application modal ---- */
+
+.application-modal {
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.application-form__amounts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.application-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.application-form__full-row {
+  grid-column: 1 / -1;
+}
+
+.disclaimer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 20px;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.disclaimer-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  padding-top: 4px;
+  cursor: pointer;
+}
+
+.disclaimer-checkbox input {
+  margin-top: 3px;
+}
+
+/* ---- active accounts on the results page ---- */
+
+.active-accounts {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.active-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.active-account-row:first-of-type {
+  border-top: none;
+}
+
+.active-account-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.active-account-row__meta {
+  font-size: 12px;
+  color: var(--ink-muted);
+  text-transform: capitalize;
+}
+
+.active-account-row__amounts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--accent-ink);
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  .application-form__grid, .application-form__amounts {
+    grid-template-columns: 1fr;
+  }
+}

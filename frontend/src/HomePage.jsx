@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MOCK_ACCOUNTS } from "./mockAccounts";
+import Toast from "./Toast";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -11,7 +12,7 @@ const GOAL_LABELS = {
 
 function formatDate(isoLike) {
   try {
-    return new Date(isoLike.replace(" ", "T") + "Z").toLocaleDateString(undefined, {
+    return new Date(isoLike).toLocaleDateString(undefined, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -39,6 +40,7 @@ export default function HomePage({
 }) {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -142,7 +144,12 @@ export default function HomePage({
               <button className="btn btn-primary" onClick={onStartNew}>
                 Start a new risk profile
               </button>
-              <button className="btn btn-ghost" disabled title="Coming soon">
+              <button
+                className="btn btn-ghost"
+                onClick={() =>
+                  setToastMessage("Request received — an advisor will call you within 1 business day.")
+                }
+              >
                 Talk to an advisor
               </button>
             </section>
@@ -158,6 +165,8 @@ export default function HomePage({
           </section>
         )}
       </div>
+
+      {toastMessage && <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />}
     </div>
   );
 }
