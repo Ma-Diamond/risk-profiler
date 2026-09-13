@@ -15,16 +15,20 @@ shapes, mapped as directly as possible onto DynamoDB's item model:
 - PortfolioReturns PK: portfolio_id, SK: horizon_years (a Query on
                    portfolio_id returns the whole curve already sorted by
                    tenor — no client-side sort needed)
+- Accounts         PK: account_id, GSI "by-client" PK: client_id — an
+                   actually-opened investment account/policy, stemming
+                   from a risk profile (see the Invest Now flow)
 - Counters         PK: counter_name — atomic ADD gives auto-increment-like
                    integer ids (session_id, client_id, portfolio_id,
-                   product_id) without changing any existing int-typed
-                   field in the API or frontend.
+                   product_id, account_id) without changing any existing
+                   int-typed field in the API or frontend.
 
 JSON-blob fields (known_context, extracted_profile, finalized_result,
-saved_profile, a chat message's content) stay JSON-encoded strings,
-exactly as they were as SQLite TEXT columns — this sidesteps DynamoDB's
-Decimal-for-numbers requirement entirely for those fields, since from
-DynamoDB's point of view they're just opaque strings.
+saved_profile, a chat message's content, an account's application/
+beneficiary details) stay JSON-encoded strings, exactly as they were
+as SQLite TEXT columns — this sidesteps DynamoDB's Decimal-for-numbers
+requirement entirely for those fields, since from DynamoDB's point of
+view they're just opaque strings.
 
 Note: the old `recommendations` / `product_recommendations` audit
 tables are dropped in this migration — nothing in the app ever read
@@ -58,6 +62,7 @@ CLIENTS = _table("Clients")
 PORTFOLIOS = _table("Portfolios")
 PRODUCTS = _table("Products")
 PORTFOLIO_RETURNS = _table("PortfolioReturns")
+ACCOUNTS = _table("Accounts")
 COUNTERS = _table("Counters")
 
 
@@ -167,6 +172,22 @@ _TABLE_DEFS = [
         AttributeDefinitions=[
             {"AttributeName": "portfolio_id", "AttributeType": "N"},
             {"AttributeName": "horizon_years", "AttributeType": "N"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    ),
+    dict(
+        TableName=f"{TABLE_PREFIX}Accounts",
+        KeySchema=[{"AttributeName": "account_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "account_id", "AttributeType": "N"},
+            {"AttributeName": "client_id", "AttributeType": "N"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "by-client",
+                "KeySchema": [{"AttributeName": "client_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
         ],
         BillingMode="PAY_PER_REQUEST",
     ),

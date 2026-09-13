@@ -101,6 +101,11 @@ risk-profiling tool. There is no structured form anymore — you are the ONLY wa
 client provides their information, so you need to gather everything below through \
 natural conversation, one question at a time, never a wall of questions.
 
+FORMATTING: write in plain text only. No markdown — no **bold**, no bullet points with \
+- or *, no headers, no numbered lists. This is a plain chat bubble that displays your \
+text exactly as written, so any formatting symbols would show up literally to the \
+client (they'd see the actual asterisks, not bold text).
+
 WHAT YOU NEED TO COLLECT (call record_client_info the moment you learn each one):
 - full_name
 - age
@@ -118,7 +123,11 @@ calculated automatically for you; do NOT do that division yourself.
 - available_lump_sum — ask "do you have a lump sum ready to invest right now?" first; if \
 no, record 0 and move on. If yes, ask how much.
 - monthly_contribution — ask "would you like to also invest a set amount every month?" \
-first; if no, record 0 and move on. If yes, ask how much.
+first; if no, record 0 and move on. If yes, ask how much. If the client asks what YOU'D \
+recommend instead of naming a figure, call recommend_monthly_contribution — this \
+computes their real disposable income (after tax, minus expenses) deterministically; \
+do not do this math yourself, and do not just subtract expenses from gross income \
+(that overstates what they actually have available, since it ignores tax).
 - knowledge_score — 1 (new to investing) to 5 (expert), based on how they describe their \
 own experience. Ask this before the risk ratings below, since it changes their phrasing.
 - tolerance_questionnaire — exactly 5 integers 1-5. DO NOT ask these questions yourself \
@@ -214,7 +223,7 @@ RECORD_TOOL = {
             },
             "monthly_contribution": {
                 "type": "number",
-                "description": "Amount they want to invest monthly going forward, 0 if none",
+                "description": "Amount they want to invest monthly going forward, 0 if none. If the client asks what you'd recommend instead of naming a figure themselves, call recommend_monthly_contribution first to get an accurate number to suggest — don't estimate or compute this yourself.",
             },
             "knowledge_score": {
                 "type": "integer",
@@ -248,7 +257,20 @@ CONFIRM_TOOL = {
     "input_schema": {"type": "object", "properties": {}},
 }
 
-INTAKE_TOOLS = [RECORD_TOOL, RISK_WIDGET_TOOL, SUMMARY_TOOL, CONFIRM_TOOL]
+RECOMMEND_CONTRIBUTION_TOOL = {
+    "name": "recommend_monthly_contribution",
+    "description": (
+        "Call this when the client asks what you'd recommend for a monthly "
+        "contribution instead of naming an amount themselves. Computes their actual "
+        "disposable income deterministically — net (after-tax) income minus expenses, "
+        "not gross income minus expenses, since gross overstates what they actually "
+        "have available. Never estimate or calculate this yourself; always use this "
+        "tool. Requires gross_monthly_income and monthly_expenses to already be known."
+    ),
+    "input_schema": {"type": "object", "properties": {}},
+}
+
+INTAKE_TOOLS = [RECORD_TOOL, RISK_WIDGET_TOOL, SUMMARY_TOOL, CONFIRM_TOOL, RECOMMEND_CONTRIBUTION_TOOL]
 
 # Fields considered stable enough to save on the account and reuse across
 # profiling sessions, rather than re-asked each time. Deliberately does
@@ -433,6 +455,10 @@ def build_post_results_system_prompt(finalized_result: dict) -> str:
 investment risk matrix they've just been shown. Their matched portfolios/products are:
 
 {products_block}
+
+FORMATTING: write in plain text only. No markdown — no **bold**, no bullet points with \
+- or *, no headers. This is a plain chat bubble that displays your text exactly as \
+written, so formatting symbols would show up literally to the client.
 
 The client can ask "what if" questions about investing a different amount or for a \
 different duration — when they do, call recalculate_investment_projection (don't \

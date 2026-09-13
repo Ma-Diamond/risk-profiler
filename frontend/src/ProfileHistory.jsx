@@ -10,7 +10,7 @@ const GOAL_LABELS = {
 
 function formatDate(isoLike) {
   try {
-    return new Date(isoLike.replace(" ", "T") + "Z").toLocaleDateString(undefined, {
+    return new Date(isoLike).toLocaleDateString(undefined, {
       year: "numeric",
       month: "short",
       day: "numeric",

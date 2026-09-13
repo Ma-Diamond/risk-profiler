@@ -1,24 +1,28 @@
 import { useState } from "react";
 import RiskLadder from "./RiskLadder";
 import Toast from "./Toast";
+import InvestmentApplicationModal from "./InvestmentApplicationModal";
 
 function formatRand(value) {
   return `R${Math.round(value).toLocaleString()}`;
 }
 
 /**
- * Purely a display component now — the finalize call happens once,
- * in App.jsx, when the chat confirms the profile. "What if" questions
- * are answered by the chat itself; when the chat's recalculation tool
+ * Mostly a display component — the finalize call happens once, in
+ * App.jsx, when the chat confirms the profile. "What if" questions are
+ * answered by the chat itself; when the chat's recalculation tool
  * fires, App.jsx merges the new numbers into `recalculatedProjections`
  * and this component just reflects whichever is freshest per product.
+ *
+ * The one piece of real interaction here is "Invest Now" — opening the
+ * application modal for a specific product/portfolio. Requires being
+ * logged in (an opened account needs a persistent identity), and
+ * already-opened accounts (passed in via `accounts`) are shown both
+ * as a dedicated section and as a status on the matching product row.
  */
-export default function ResultsPanel({ result, recalculatedProjections }) {
+export default function ResultsPanel({ result, recalculatedProjections, accounts = [], authToken, onAccountOpened }) {
   const [toastMessage, setToastMessage] = useState(null);
-
-  const investNow = (productName) => {
-    setToastMessage(`Great choice — we've started your application for ${productName}.`);
-  };
+  const [applicationTarget, setApplicationTarget] = useState(null); // { product, portfolio } | null
 
   const markers = {
     tolerance: result.tolerance_band,
@@ -33,6 +37,16 @@ export default function ResultsPanel({ result, recalculatedProjections }) {
       : prod.projection
       ? { ...prod.projection, isRecalculated: false }
       : null;
+  };
+
+  const accountForProduct = (productId) => accounts.find((a) => a.product_id === productId);
+
+  const investNow = (product, portfolio) => {
+    if (!authToken) {
+      setToastMessage("Log in first — opening an account needs to be tied to your account.");
+      return;
+    }
+    setApplicationTarget({ product, portfolio });
   };
 
   return (
@@ -82,6 +96,29 @@ export default function ResultsPanel({ result, recalculatedProjections }) {
           </div>
         </div>
 
+        {accounts.length > 0 && (
+          <div className="active-accounts card card--pop-in">
+            <h3 className="form-section__title">Your active accounts</h3>
+            {accounts.map((acc) => (
+              <div key={acc.account_id} className="active-account-row">
+                <div className="active-account-row__main">
+                  <strong>{acc.product_name}</strong>
+                  <span className="active-account-row__meta">
+                    {acc.tax_wrapper.replace(/_/g, " ")} · {acc.portfolio_name}
+                  </span>
+                  {acc.beneficiary_name && (
+                    <span className="active-account-row__meta">Beneficiary: {acc.beneficiary_name}</span>
+                  )}
+                </div>
+                <div className="active-account-row__amounts mono">
+                  {acc.initial_amount > 0 && <span>{formatRand(acc.initial_amount)} lump sum</span>}
+                  {acc.monthly_amount > 0 && <span>{formatRand(acc.monthly_amount)}/month</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <h3 className="form-section__title">Matched portfolios &amp; products</h3>
         {result.matched_portfolios.map((p, i) => (
           <div
@@ -104,6 +141,7 @@ export default function ResultsPanel({ result, recalculatedProjections }) {
               <div className="product-list">
                 {p.matched_products.map((prod) => {
                   const projection = projectionFor(prod);
+                  const existingAccount = accountForProduct(prod.id);
                   return (
                     <div
                       key={prod.id}
@@ -150,9 +188,13 @@ export default function ResultsPanel({ result, recalculatedProjections }) {
                         </div>
                       </div>
 
-                      <button className="btn btn-invest" onClick={() => investNow(prod.name)}>
-                        Invest Now
-                      </button>
+                      {existingAccount ? (
+                        <span className="pill">Active ✓</span>
+                      ) : (
+                        <button className="btn btn-invest" onClick={() => investNow(prod, p)}>
+                          Invest Now
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -175,6 +217,21 @@ export default function ResultsPanel({ result, recalculatedProjections }) {
           actual investment performance will vary.
         </p>
       </div>
+
+      {applicationTarget && (
+        <InvestmentApplicationModal
+          product={applicationTarget.product}
+          portfolio={applicationTarget.portfolio}
+          clientId={result.client_id}
+          defaultMonthlyAmount={result.monthly_contribution}
+          authToken={authToken}
+          onClose={() => setApplicationTarget(null)}
+          onOpened={(account) => {
+            onAccountOpened?.(account);
+            setToastMessage(`${account.product_name} is now active on your profile.`);
+          }}
+        />
+      )}
 
       {toastMessage && <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />}
     </div>

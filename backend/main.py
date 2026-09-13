@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from datetime import datetime, timezone
 
 import ai_chat
 import auth
+import boto3
 import db
 import pdf_extract
 import projections
@@ -14,6 +16,7 @@ import tax_estimate
 from boto3.dynamodb.conditions import Key
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from matching import (
     Portfolio,
     Product,
@@ -192,6 +195,10 @@ class TaxEstimateOut(BaseModel):
     rate: int
 
 
+class TTSIn(BaseModel):
+    text: str
+
+
 class RiskRatingsIn(BaseModel):
     ratings: list[int]
 
@@ -232,9 +239,49 @@ class ProfileSummaryOut(BaseModel):
     goals_detail: str | None
 
 
+class BeneficiaryIn(BaseModel):
+    full_name: str
+    id_number: str
+    relationship: str
+
+
+class AccountApplicationIn(BaseModel):
+    client_id: int
+    product_id: int
+    portfolio_id: int
+    initial_amount: float = Field(ge=0, default=0)
+    monthly_amount: float = Field(ge=0, default=0)
+    full_name: str
+    id_number: str
+    date_of_birth: str
+    address: str
+    contact_number: str
+    email: str
+    bank_name: str
+    bank_account_number: str
+    branch_code: str
+    beneficiary: BeneficiaryIn | None = None
+
+
+class AccountOut(BaseModel):
+    account_id: int
+    client_id: int
+    product_id: int
+    product_name: str
+    portfolio_id: int
+    portfolio_name: str
+    tax_wrapper: str
+    initial_amount: float
+    monthly_amount: float
+    status: str
+    created_at: str
+    beneficiary_name: str | None = None
+
+
 class ProfileDetailOut(BaseModel):
     chat_session_id: int
     profile_result: ProfileResult
+    accounts: list[AccountOut] = []
 
 
 # ---------------------------------------------------------------------
@@ -596,6 +643,46 @@ def get_tax_estimate(monthly_income: float) -> TaxEstimateOut:
     return TaxEstimateOut(label=label, rate=rate)
 
 
+_POLLY_MAX_CHARS = 3000  # keeps a single request bounded — hackathon-scale abuse guard, not a real quota system
+_polly_client = None
+
+
+def _get_polly():
+    global _polly_client
+    if _polly_client is None:
+        region = os.environ.get("AWS_REGION")
+        _polly_client = boto3.client("polly", **({"region_name": region} if region else {}))
+    return _polly_client
+
+
+@app.post("/tts")
+def synthesize_speech(payload: TTSIn) -> Response:
+    """Text -> spoken audio via Amazon Polly's Neural engine — used for
+    the optional "read replies aloud" toggle. Deliberately not tied to
+    a specific chat session or auth: it's a stateless text-to-audio
+    utility, no different in sensitivity from any other public route
+    here. Neural voices sound meaningfully more natural than the
+    browser's built-in speechSynthesis, which is the whole point of
+    using Polly instead."""
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="text must not be empty")
+    text = text[:_POLLY_MAX_CHARS]
+
+    try:
+        resp = _get_polly().synthesize_speech(
+            Text=text,
+            OutputFormat="mp3",
+            VoiceId="Joanna",
+            Engine="neural",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Speech synthesis unavailable: {e}")
+
+    audio_bytes = resp["AudioStream"].read()
+    return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
 # ---------------------------------------------------------------------
 # Chat — single endpoint, two phases
 # ---------------------------------------------------------------------
@@ -683,6 +770,23 @@ def _handle_intake_turn(
         if tool_name == "show_profile_summary":
             summary_holder["data"] = ai_chat.build_profile_summary(extracted)
             return {"status": "summary_shown"}
+
+        if tool_name == "recommend_monthly_contribution":
+            income = extracted.get("gross_monthly_income")
+            expenses = extracted.get("monthly_expenses")
+            if income is None or expenses is None:
+                return {
+                    "status": "unavailable",
+                    "detail": "gross_monthly_income and monthly_expenses must both be known first",
+                }
+            net_income = tax_estimate.estimate_net_monthly_income(income)
+            disposable_surplus = round(net_income - expenses, 2)
+            return {
+                "status": "computed",
+                "net_monthly_income": round(net_income, 2),
+                "monthly_expenses": expenses,
+                "disposable_surplus": disposable_surplus,
+            }
 
         if tool_name == "confirm_and_proceed":
             complete, missing = ai_chat.is_profile_complete(extracted)
@@ -1061,4 +1165,139 @@ def get_profile(client_id: int, user_id: str = Depends(require_user_id)) -> Prof
         raise HTTPException(status_code=404, detail="stored result not found for this profile")
 
     profile_result = ProfileResult.model_validate_json(session_item["finalized_result"])
-    return ProfileDetailOut(chat_session_id=chat_session_id, profile_result=profile_result)
+    accounts = _load_accounts_for_client(client_id)
+
+    return ProfileDetailOut(chat_session_id=chat_session_id, profile_result=profile_result, accounts=accounts)
+
+
+def _load_accounts_for_client(client_id: int) -> list[AccountOut]:
+    resp = db.ACCOUNTS.query(
+        IndexName="by-client",
+        KeyConditionExpression=Key("client_id").eq(client_id),
+    )
+    accounts = []
+    for a in resp["Items"]:
+        beneficiary_name = None
+        if a.get("beneficiary"):
+            beneficiary_name = json.loads(a["beneficiary"])["full_name"]
+        accounts.append(
+            AccountOut(
+                account_id=int(a["account_id"]),
+                client_id=int(a["client_id"]),
+                product_id=int(a["product_id"]),
+                product_name=a["product_name"],
+                portfolio_id=int(a["portfolio_id"]),
+                portfolio_name=a["portfolio_name"],
+                tax_wrapper=a["tax_wrapper"],
+                initial_amount=db.num(a["initial_amount"]),
+                monthly_amount=db.num(a["monthly_amount"]),
+                status=a["status"],
+                created_at=a["created_at"],
+                beneficiary_name=beneficiary_name,
+            )
+        )
+    return accounts
+
+
+# ---------------------------------------------------------------------
+# Investment accounts — the "Invest Now" flow. A hackathon-realistic
+# simulation (form -> disclaimer -> account "opened"), not a real
+# policy administration integration. Opening an account requires
+# login, unlike the guest-friendly chat/profiling flow, since an
+# account is inherently tied to a persistent identity.
+# ---------------------------------------------------------------------
+@app.post("/accounts", response_model=AccountOut)
+def open_account(payload: AccountApplicationIn, user_id: str = Depends(require_user_id)) -> AccountOut:
+    client_item = db.CLIENTS.get_item(Key={"client_id": payload.client_id}).get("Item")
+    if client_item is None:
+        raise HTTPException(status_code=404, detail="profile not found")
+    if client_item.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to open an account against this profile")
+
+    product_item = db.PRODUCTS.get_item(Key={"product_id": payload.product_id}).get("Item")
+    if product_item is None:
+        raise HTTPException(status_code=404, detail="product not found")
+    portfolio_item = db.PORTFOLIOS.get_item(Key={"portfolio_id": payload.portfolio_id}).get("Item")
+    if portfolio_item is None:
+        raise HTTPException(status_code=404, detail="portfolio not found")
+
+    tax_wrapper = product_item["tax_wrapper"]
+    # Server-side, not just a frontend form requirement — a retirement
+    # annuity legally needs a nominated beneficiary, so we don't trust
+    # the client-side form alone to enforce this.
+    if tax_wrapper == "retirement_annuity" and payload.beneficiary is None:
+        raise HTTPException(
+            status_code=422,
+            detail="A retirement annuity requires a nominated beneficiary before the account can be opened.",
+        )
+
+    account_id = db.next_id("account_id")
+    created_at = _now_iso()
+    account_item = {
+        "account_id": account_id,
+        "client_id": payload.client_id,
+        "user_id": user_id,
+        "product_id": payload.product_id,
+        "product_name": product_item["name"],
+        "portfolio_id": payload.portfolio_id,
+        "portfolio_name": portfolio_item["name"],
+        "tax_wrapper": tax_wrapper,
+        "initial_amount": db.dec(payload.initial_amount),
+        "monthly_amount": db.dec(payload.monthly_amount),
+        "application": json.dumps(
+            {
+                "full_name": payload.full_name,
+                "id_number": payload.id_number,
+                "date_of_birth": payload.date_of_birth,
+                "address": payload.address,
+                "contact_number": payload.contact_number,
+                "email": payload.email,
+                "bank_name": payload.bank_name,
+                "bank_account_number": payload.bank_account_number,
+                "branch_code": payload.branch_code,
+            }
+        ),
+        "status": "active",
+        "created_at": created_at,
+    }
+    if payload.beneficiary is not None:
+        account_item["beneficiary"] = json.dumps(payload.beneficiary.model_dump())
+    db.ACCOUNTS.put_item(Item=account_item)
+
+    # The application form gathers fuller KYC-style detail than the
+    # chat intake did — this is the "application form populates the
+    # profile" behaviour: enrich the stored client record with it.
+    db.CLIENTS.update_item(
+        Key={"client_id": payload.client_id},
+        UpdateExpression=(
+            "SET full_name = :fn, id_number = :idn, date_of_birth = :dob, "
+            "address = :addr, contact_number = :cn, email = :em, "
+            "bank_name = :bn, bank_account_number = :ban, branch_code = :bc"
+        ),
+        ExpressionAttributeValues={
+            ":fn": payload.full_name,
+            ":idn": payload.id_number,
+            ":dob": payload.date_of_birth,
+            ":addr": payload.address,
+            ":cn": payload.contact_number,
+            ":em": payload.email,
+            ":bn": payload.bank_name,
+            ":ban": payload.bank_account_number,
+            ":bc": payload.branch_code,
+        },
+    )
+
+    return AccountOut(
+        account_id=account_id,
+        client_id=payload.client_id,
+        product_id=payload.product_id,
+        product_name=product_item["name"],
+        portfolio_id=payload.portfolio_id,
+        portfolio_name=portfolio_item["name"],
+        tax_wrapper=tax_wrapper,
+        initial_amount=payload.initial_amount,
+        monthly_amount=payload.monthly_amount,
+        status="active",
+        created_at=created_at,
+        beneficiary_name=payload.beneficiary.full_name if payload.beneficiary else None,
+    )
