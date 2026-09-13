@@ -212,13 +212,11 @@ def init_db(seed: bool = True) -> None:
         return
 
     from seed_data import (
-        PORTFOLIOS as SEED_PORTFOLIOS,
-        PRODUCTS as SEED_PRODUCTS,
-        PRODUCT_PORTFOLIO_MAPPING,
-        PORTFOLIO_RETURNS as SEED_PORTFOLIO_RETURNS,
-        PORTFOLIO_RETURNS_METHODOLOGY,
-        PORTFOLIO_RETURNS_METHODOLOGY_BY_KEY,
-    )
+    PORTFOLIOS as SEED_PORTFOLIOS,
+    PRODUCTS as SEED_PRODUCTS,
+    PRODUCT_PORTFOLIO_MAPPING,
+    PORTFOLIO_RETURNS as SEED_PORTFOLIO_RETURNS,
+)
 
     portfolio_key_to_id: dict[str, int] = {}
     portfolio_id_to_product_ids: dict[int, list[int]] = {}
@@ -276,15 +274,14 @@ def init_db(seed: bool = True) -> None:
 
     for key, points in SEED_PORTFOLIO_RETURNS.items():
         portfolio_id = portfolio_key_to_id[key]
-        methodology = PORTFOLIO_RETURNS_METHODOLOGY_BY_KEY.get(key, PORTFOLIO_RETURNS_METHODOLOGY)
-        for horizon, expected, lower, upper in points:
-            PORTFOLIO_RETURNS.put_item(
-                Item={
-                    "portfolio_id": portfolio_id,
-                    "horizon_years": dec(horizon),
-                    "expected_return_pct": dec(expected),
-                    "lower_return_pct": dec(lower),
-                    "upper_return_pct": dec(upper),
-                    "methodology": methodology,
-                }
-            )
+
+    for horizon, expected, lower, upper in points:
+        PORTFOLIO_RETURNS.put_item(
+            Item={
+                "portfolio_id": portfolio_id,
+                "horizon_years": dec(horizon),
+                "expected_return_pct": dec(expected),
+                "lower_return_pct": dec(lower),
+                "upper_return_pct": dec(upper),
+            }
+        )

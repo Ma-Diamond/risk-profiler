@@ -20,7 +20,7 @@ portfolio_returns.csv holds a TERM STRUCTURE (yield-curve style) per
 portfolio, not one flat rate: each row is one tenor point, and a
 portfolio normally has several rows, one per horizon_years — e.g.
 
-    portfolio_key,horizon_years,expected_return_pct,lower_return_pct,upper_return_pct,methodology
+    portfolio_key,horizon_years,expected_return_pct,lower_return_pct,upper_return_pct
     balanced_growth,1,7.0,4.0,10.0,
     balanced_growth,5,9.0,5.0,13.0,
     balanced_growth,10,10.0,3.0,17.0,
@@ -37,12 +37,6 @@ import csv
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
-
-DEFAULT_METHODOLOGY = (
-    "PLACEHOLDER — dummy figures for development only. Replace with "
-    "output from an actual capital market assumptions / actuarial "
-    "process before this is used for anything beyond a POC."
-)
 
 
 def _read_csv(filename: str) -> list[dict]:
@@ -136,12 +130,12 @@ def _load_mapping() -> list[tuple[str, str]]:
 
 
 def _load_returns() -> tuple[dict[str, list[tuple[float, float, float, float]]], dict[str, str]]:
-    """Returns (curves_by_key, methodology_by_key). Each curve is a list
+    """Returns (curves_by_key). Each curve is a list
     of (horizon_years, expected, lower, upper) points — a portfolio_key
     can appear on multiple rows, one per tenor point."""
     rows = _read_csv("portfolio_returns.csv")
     curves: dict[str, list[tuple[float, float, float, float]]] = {}
-    methodology_by_key: dict[str, str] = {}
+
     for i, r in enumerate(rows, start=2):
         try:
             key = r["portfolio_key"].strip()
@@ -152,20 +146,17 @@ def _load_returns() -> tuple[dict[str, list[tuple[float, float, float, float]]],
                 float(r["upper_return_pct"]),
             )
             curves.setdefault(key, []).append(point)
-            row_methodology = _blank_to_none(r.get("methodology"))
-            if row_methodology:
-                methodology_by_key[key] = row_methodology
+            
         except (KeyError, ValueError) as e:
             raise ValueError(f"portfolio_returns.csv row {i}: {e}") from e
 
     for key in curves:
         curves[key].sort(key=lambda p: p[0])
 
-    return curves, methodology_by_key
+    return curves
 
 
 PORTFOLIOS: list[dict] = _load_portfolios()
 PRODUCTS: list[dict] = _load_products()
 PRODUCT_PORTFOLIO_MAPPING: list[tuple[str, str]] = _load_mapping()
-PORTFOLIO_RETURNS, PORTFOLIO_RETURNS_METHODOLOGY_BY_KEY = _load_returns()
-PORTFOLIO_RETURNS_METHODOLOGY = DEFAULT_METHODOLOGY  # fallback default
+PORTFOLIO_RETURNS = _load_returns()
