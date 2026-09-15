@@ -113,7 +113,10 @@ export default function App() {
     try {
       const headers = { Authorization: `Bearer ${authToken}` };
       const profileRes = await fetch(`${API_BASE}/profiles/${clientId}`, { headers });
-      if (!profileRes.ok) throw new Error("Couldn't load that profile");
+      if (!profileRes.ok) {
+        const detail = await profileRes.json().catch(() => ({}));
+        throw new Error(detail.detail || `Couldn't load that profile (${profileRes.status})`);
+      }
       const profileData = await profileRes.json();
 
       const historyRes = await fetch(
@@ -127,8 +130,12 @@ export default function App() {
       setRecalcMap({});
       setAccounts(profileData.accounts || []);
       setView("chat");
-    } catch {
-      // Leave the user where they were, with nothing changed, if this fails.
+    } catch (e) {
+      // Temporary: surfacing this instead of swallowing it silently so
+      // we can see exactly what's failing — replace with a proper
+      // toast once we know the real cause.
+      console.error("handleContinueProfile failed:", e);
+      alert(`Couldn't continue that profile: ${e.message}`);
     }
   };
 
