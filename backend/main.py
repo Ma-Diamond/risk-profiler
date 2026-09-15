@@ -28,7 +28,7 @@ from matching import (
     match_products,
     pick_top_product,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from scoring import BAND_EXPLANATIONS, BAND_LABELS, ClientInput, compute_bands
 
 app = FastAPI(title="Risk Profiling API")
@@ -157,6 +157,23 @@ class ProfileResult(BaseModel):
     monthly_expenses: float
     monthly_contribution: float
     matched_portfolios: list[PortfolioOut]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_band_framing(cls, data):
+        """Profiles finalized before governed_risk_band_label/
+        _explanation existed have stored JSON without them — without
+        this, loading one of those old records (e.g. Continue on an
+        old profile) would hard-crash with a validation error instead
+        of just... having a slightly less fancy label. Derives them
+        from governed_risk_band, which every record has always had."""
+        if isinstance(data, dict) and "governed_risk_band" in data:
+            band = data["governed_risk_band"]
+            if not data.get("governed_risk_band_label"):
+                data["governed_risk_band_label"] = BAND_LABELS.get(band, f"Band {band}")
+            if not data.get("governed_risk_band_explanation"):
+                data["governed_risk_band_explanation"] = BAND_EXPLANATIONS.get(band, "")
+        return data
 
 
 class ChatStartIn(BaseModel):
