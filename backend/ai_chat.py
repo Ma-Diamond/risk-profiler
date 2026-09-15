@@ -555,12 +555,14 @@ def build_intake_system_prompt(known_context: dict | None = None, language: str 
 RECALCULATE_TOOL = {
     "name": "recalculate_investment_projection",
     "description": (
-        "Recalculate the projected investment value for the client's matched products "
-        "under a different lump sum, monthly contribution, or horizon than originally "
-        "used. Call this whenever the client asks a 'what if' question about investing "
-        "a different amount or for a different length of time — this replaces any "
-        "manual calculator, so always use this tool rather than estimating the answer "
-        "yourself."
+        "Re-runs the full product match for a hypothetical lump sum, monthly contribution, "
+        "or horizon — NOT just recomputed numbers on the same products. A different amount "
+        "can make a product newly eligible (e.g. a bigger lump sum clearing a minimum) or "
+        "drop one that no longer qualifies, so the recommended set itself can change. Call "
+        "this whenever the client asks a 'what if' question about investing a different "
+        "amount or for a different length of time — never estimate this yourself. This is "
+        "a PREVIEW ONLY: nothing is saved to their actual profile unless they explicitly "
+        "ask you to update it, so say so plainly if they seem to think it already saved."
     ),
     "input_schema": {
         "type": "object",
@@ -576,10 +578,6 @@ RECALCULATE_TOOL = {
             "horizon_years": {
                 "type": "number",
                 "description": "Investment horizon in years to project over — use the original if unchanged",
-            },
-            "product_name": {
-                "type": "string",
-                "description": "Which matched product to recalculate for, by name (partial match ok). Omit to recalculate for every matched product.",
             },
         },
         "required": ["initial_amount", "monthly_amount", "horizon_years"],
@@ -603,12 +601,14 @@ POST_RESULTS_TOOLS = [RECALCULATE_TOOL, CHECK_SURPLUS_TOOL]
 
 def build_post_results_system_prompt(finalized_result: dict, product_blurbs: list[str] | None = None, language: str = "en") -> str:
     lines = []
-    for pf in finalized_result.get("matched_portfolios", []):
-        for prod in pf.get("matched_products", []):
-            lines.append(
-                f"- {prod['name']} (under {pf['name']}, {prod['tax_wrapper']} wrapper, "
-                f"{prod['total_fee_pct']}% fee)"
-            )
+    for prod in finalized_result.get("matched_products", []):
+        portfolio_bits = ", ".join(
+            f"{rp['portfolio_name']} ({rp['allocation_pct']}%)" for rp in prod.get("recommended_portfolios", [])
+        )
+        lines.append(
+            f"- {prod['name']} ({prod['tax_wrapper']} wrapper, {prod['total_fee_pct']}% effective fee) — "
+            f"recommended split: {portfolio_bits or '(none)'}"
+        )
     products_block = "\n".join(lines) if lines else "(no matched products)"
 
     details_block = ""
@@ -621,7 +621,9 @@ def build_post_results_system_prompt(finalized_result: dict, product_blurbs: lis
         )
 
     return f"""You are a friendly financial assistant helping a client understand the \
-investment risk matrix they've just been shown. Their matched portfolios/products are:
+investment risk matrix they've just been shown. Each matched PRODUCT comes with its own \
+recommended SPLIT across one or more portfolios (a client holds several portfolios inside \
+one product, not one portfolio per product):
 
 {products_block}
 {details_block}
@@ -632,12 +634,17 @@ written, so formatting symbols would show up literally to the client.
 
 The client can ask "what if" questions about investing a different amount or for a \
 different duration — when they do, call recalculate_investment_projection (don't \
-estimate the numbers yourself, always use the tool) and then explain the result in \
-plain, encouraging language. Keep replies short — two or three sentences plus the key \
-numbers. You can also answer general questions about the products, fees, or their risk \
-band using the information above. If asked to change something fundamental about their \
-profile (income, goal, age, etc.), explain that they'd need to go back and edit their \
-details rather than changing it here.
+estimate the numbers yourself, always use the tool). This is a genuine re-match: the \
+SET of recommended products can change (a bigger lump sum might newly qualify for a \
+product it didn't before, or a smaller one might drop below a minimum) — don't assume \
+the same products are still the right ones. Point out clearly when something changed \
+(a product became newly available, or dropped off). This is a PREVIEW ONLY — nothing \
+is saved unless the client explicitly asks you to update their actual profile, so make \
+that clear rather than implying it's already been changed. Keep replies short — a few \
+sentences plus the key numbers. You can also answer general questions about the \
+products, portfolio splits, fees, or their risk band using the information above. If \
+asked to change something fundamental about their profile (income, goal, age, etc.), \
+explain that they'd need to go back and edit their details rather than changing it here.
 
 CHECKING FOR SPARE CASH: if the client asks you to check their balance, simulate \
 month-end, or see if they have room to invest more, call check_monthly_surplus — this \
