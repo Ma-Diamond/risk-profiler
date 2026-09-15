@@ -36,9 +36,9 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   /* -- shape & motion -- */
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
   --shadow-card: 0 1px 2px rgba(16, 32, 30, 0.04), 0 8px 24px rgba(16, 32, 30, 0.06);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
