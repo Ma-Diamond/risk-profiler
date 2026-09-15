@@ -139,3 +139,39 @@ input, select, textarea {
   background: var(--surface-sunken);
   color: var(--ink-muted);
 }
+
+/* -- modal base (SummaryModal, InvestmentApplicationModal, etc.) --
+   Was missing entirely — nothing here was actually centering these,
+   they were just rendering in normal document flow wherever their
+   parent happened to place them. */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 32, 30, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.modal-card {
+  width: 100%;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-card__title {
+  font-size: 20px;
+}
+
+.modal-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
