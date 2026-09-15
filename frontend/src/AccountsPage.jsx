@@ -48,8 +48,8 @@ export default function AccountsPage({ authToken, onBack }) {
           <div className="history-list">
             {accounts.map((acc) => (
               <div key={acc.account_id} className="history-row accounts-page__row">
-                <span className={`pill accounts-page__status accounts-page__status--${acc.status}`}>
-                  {acc.status}
+                <span className={`pill pill--${acc.status}`}>
+                  {acc.status === "pending" ? "Pending review" : acc.status}
                 </span>
                 <div className="history-row__main">
                   <strong>{acc.product_name}</strong>

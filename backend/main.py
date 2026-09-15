@@ -374,6 +374,7 @@ def _item_to_product(item: dict) -> Product:
         min_term_years=db.num(item["min_term_years"]),
         description=item["description"],
         spec_notes=item.get("spec_notes") or "",
+        key=item.get("key") or "",
     )
 
 
@@ -391,6 +392,7 @@ def _item_to_portfolio(item: dict) -> Portfolio:
         requires_emergency_fund=bool(item["requires_emergency_fund"]),
         underlying_fee_pct=db.num(item["underlying_fee_pct"]),
         description=item["description"],
+        key=item.get("key") or "",
     )
 
 
@@ -1498,7 +1500,7 @@ def open_account(payload: AccountApplicationIn, user_id: str = Depends(require_u
                 "branch_code": payload.branch_code,
             }
         ),
-        "status": "active",
+        "status": "pending",
         "created_at": created_at,
     }
     if payload.beneficiary is not None:
@@ -1554,7 +1556,7 @@ def open_account(payload: AccountApplicationIn, user_id: str = Depends(require_u
         tax_wrapper=tax_wrapper,
         initial_amount=payload.initial_amount,
         monthly_amount=payload.monthly_amount,
-        status="active",
+        status="pending",
         created_at=created_at,
         beneficiary_name=payload.beneficiary.full_name if payload.beneficiary else None,
     )

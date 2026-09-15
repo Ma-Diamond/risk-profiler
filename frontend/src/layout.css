@@ -377,11 +377,11 @@
 
 .chat-panel__composer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
   margin: 10px 16px 16px;
   padding: 6px 6px 6px 18px;
-  border-radius: 999px;
+  border-radius: 22px;
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
@@ -392,7 +392,12 @@
   flex: 1;
   border: none;
   background: none;
-  padding: 8px 4px;
+  padding: 9px 4px;
+  resize: none;
+  max-height: 140px;
+  overflow-y: auto;
+  line-height: 1.4;
+  font-family: var(--font-body);
 }
 
 .chat-panel__input:focus { border: none; }
@@ -940,14 +945,19 @@
   align-items: center;
 }
 
-.accounts-page__status {
-  text-transform: capitalize;
-  flex-shrink: 0;
+.pill--pending {
+  background: var(--band-4-wash);
+  color: var(--band-4);
 }
 
-.accounts-page__status--active {
+.pill--active {
   background: var(--band-3-wash);
   color: var(--band-3);
+}
+
+.active-account-row__status {
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 .accounts-page__amounts {

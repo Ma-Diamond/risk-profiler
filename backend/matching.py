@@ -37,6 +37,7 @@ class Portfolio:
     requires_emergency_fund: int
     underlying_fee_pct: float
     description: str
+    key: str = ""
 
 
 def is_eligible(
@@ -109,6 +110,7 @@ class Product:
     min_term_years: float
     description: str
     spec_notes: str = ""
+    key: str = ""
 
 
 def combined_fee_pct(product: Product, portfolio: Portfolio) -> float:
@@ -177,11 +179,113 @@ def _rank_eligible_portfolios(portfolios: list[Portfolio], governed_risk_band: i
     return sorted(portfolios, key=lambda p: (abs(governed_risk_band - p.risk_band), p.underlying_fee_pct))
 
 
-def recommend_portfolio_allocations(
+# ---------------------------------------------------------------------
+# PRODUCT-SPECIFIC ALLOCATION RULES
+#
+# A small number of real products have a genuinely FIXED allocation
+# structure mandated by how the product itself works, not a general
+# "weighted toward best fit" recommendation — these override the
+# default algorithm entirely for their specific product_key, using the
+# portfolio's stable key (not its display name) to identify the
+# required portfolios reliably.
+# ---------------------------------------------------------------------
+STASH_PRODUCT_KEY = "stash_tfsa"
+STASH_CASH_KEY = "liberty_cash_tracker"
+STASH_TOP40_KEY = "liberty_top_40_tracker"
+# STASH is contractually restricted to exactly these two portfolios,
+# split only in fixed 25% increments (25/75, 50/50, 75/25, or 100/0).
+# More conservative clients sit further toward Cash; more aggressive
+# ones further toward Top 40 — mapped directly off governed_risk_band
+# since STASH doesn't have room for a third, in-between option.
+STASH_SPLIT_BY_BAND: dict[int, tuple[float, float]] = {
+    1: (100.0, 0.0),
+    2: (75.0, 25.0),
+    3: (50.0, 50.0),
+    4: (25.0, 75.0),
+    5: (0.0, 100.0),
+}
+
+EVOLVE_PRODUCT_KEYS = {"evolve_investment_plan", "evolve_retirement_annuity"}
+EVOLVE_CAPPED_TRACKER_KEY = "liberty_capped_tracker"
+# Real product rule: a mandatory portion must sit in the Capped
+# Tracker for the first 3 years (growth-shared, downside-limited),
+# fixed at 40% or 60% — not a free choice. More conservative clients
+# get the larger mandatory floor there; the remainder follows the
+# normal best-fit ranking among the rest of the eligible set.
+EVOLVE_CAPPED_TRACKER_PCT_BY_BAND: dict[int, float] = {1: 60.0, 2: 60.0, 3: 60.0, 4: 40.0, 5: 40.0}
+
+
+def _stash_allocation(
+    eligible_portfolios: list[Portfolio], governed_risk_band: int
+) -> list[tuple[Portfolio, float]] | None:
+    """Returns None if neither required portfolio is eligible (falls
+    back to the normal algorithm) — otherwise uses whichever of the
+    two are actually eligible, at 100% if only one survived the
+    client's own risk-band gate."""
+    by_key = {p.key: p for p in eligible_portfolios}
+    cash = by_key.get(STASH_CASH_KEY)
+    top40 = by_key.get(STASH_TOP40_KEY)
+    if cash is None and top40 is None:
+        return None
+
+    cash_pct, top40_pct = STASH_SPLIT_BY_BAND.get(governed_risk_band, (50.0, 50.0))
+
+    if cash and top40:
+        allocations = []
+        if cash_pct > 0:
+            allocations.append((cash, cash_pct))
+        if top40_pct > 0:
+            allocations.append((top40, top40_pct))
+        return allocations
+    if cash:
+        return [(cash, 100.0)]
+    return [(top40, 100.0)]
+
+
+def _evolve_allocation(
     eligible_portfolios: list[Portfolio], governed_risk_band: int, investment_goal: str
+) -> list[tuple[Portfolio, float]] | None:
+    """Returns None if the Capped Tracker itself isn't eligible for
+    this client (falls back to the normal algorithm) — Evolve's
+    mandatory-floor rule only applies when that portfolio is actually
+    on the table."""
+    capped = next((p for p in eligible_portfolios if p.key == EVOLVE_CAPPED_TRACKER_KEY), None)
+    if capped is None:
+        return None
+
+    capped_pct = EVOLVE_CAPPED_TRACKER_PCT_BY_BAND.get(governed_risk_band, 50.0)
+    remainder_pct = 100.0 - capped_pct
+
+    others = [p for p in eligible_portfolios if p.key != EVOLVE_CAPPED_TRACKER_KEY]
+    if not others:
+        return [(capped, 100.0)]
+
+    ranked_others = _rank_eligible_portfolios(others, governed_risk_band)[: MAX_PORTFOLIOS_PER_PRODUCT - 1]
+    weight_table = ALLOCATION_WEIGHTS_BY_GOAL.get(investment_goal, ALLOCATION_WEIGHTS_BY_GOAL["general_growth"])
+    other_weights = weight_table.get(len(ranked_others), [1.0 / len(ranked_others)] * len(ranked_others))
+
+    allocations = [(capped, round(capped_pct, 1))]
+    for p, w in zip(ranked_others, other_weights):
+        allocations.append((p, round(w * remainder_pct, 1)))
+    return allocations
+
+
+def recommend_portfolio_allocations(
+    eligible_portfolios: list[Portfolio], governed_risk_band: int, investment_goal: str, product_key: str = ""
 ) -> list[tuple[Portfolio, float]]:
     """(portfolio, allocation_pct) pairs for up to MAX_PORTFOLIOS_PER_PRODUCT
-    eligible portfolios, weighted toward the best fit."""
+    eligible portfolios, weighted toward the best fit — unless
+    product_key identifies a product with its own fixed allocation
+    rule (STASH, Evolve), in which case that rule applies instead."""
+    if product_key == STASH_PRODUCT_KEY:
+        override = _stash_allocation(eligible_portfolios, governed_risk_band)
+        if override is not None:
+            return override
+    if product_key in EVOLVE_PRODUCT_KEYS:
+        override = _evolve_allocation(eligible_portfolios, governed_risk_band, investment_goal)
+        if override is not None:
+            return override
+
     ranked = _rank_eligible_portfolios(eligible_portfolios, governed_risk_band)
     chosen = ranked[:MAX_PORTFOLIOS_PER_PRODUCT]
     weight_table = ALLOCATION_WEIGHTS_BY_GOAL.get(investment_goal, ALLOCATION_WEIGHTS_BY_GOAL["general_growth"])
@@ -222,6 +326,21 @@ def match_products_with_allocations(
 
         mapped_ids = product_id_to_portfolio_ids.get(product.id, [])
         candidates = [portfolios_by_id[pid] for pid in mapped_ids if pid in portfolios_by_id]
+
+        if product.key == STASH_PRODUCT_KEY:
+            # STASH's split is a deliberate, explicit client choice
+            # between exactly two named options (Cash / Top 40), not a
+            # recommendation subject to the general risk-band safety
+            # gate — that gate would otherwise exclude Top 40 (risk_band
+            # 5) outright for most clients, silently collapsing every
+            # split to 100% Cash and making the 25/50/75 ratios never
+            # actually happen. The conservative-to-aggressive weighting
+            # IS the safety mechanism here, via STASH_SPLIT_BY_BAND.
+            allocations = _stash_allocation(candidates, bands.governed_risk_band)
+            if allocations is not None:
+                results.append((product, allocations))
+                continue
+
         eligible = [
             p
             for p in candidates
@@ -230,7 +349,7 @@ def match_products_with_allocations(
         if not eligible:
             continue
 
-        allocations = recommend_portfolio_allocations(eligible, bands.governed_risk_band, investment_goal)
+        allocations = recommend_portfolio_allocations(eligible, bands.governed_risk_band, investment_goal, product_key=product.key)
         results.append((product, allocations))
 
     return results

@@ -269,9 +269,9 @@ export default function InvestmentApplicationModal({
 
         {step === "success" && openedAccount && (
           <>
-            <h3 className="modal-card__title">🎉 Account opened</h3>
+            <h3 className="modal-card__title">📝 Application submitted</h3>
             <p className="step-subtitle">
-              Your {openedAccount.product_name} is active. It'll show up on your profile page from now on.
+              Your {openedAccount.product_name} application is pending review. It'll show up on your profile page as "Pending review" until it's processed.
             </p>
             <div className="modal-card__actions">
               <button type="button" className="btn btn-primary" onClick={onClose}>

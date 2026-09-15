@@ -82,7 +82,9 @@ function ProductCard({ product, isTop, existingAccount, onInvest, style }) {
 
       <div className="product-card__footer">
         {existingAccount ? (
-          <span className="pill">Active ✓</span>
+          <span className={`pill pill--${existingAccount.status}`}>
+            {existingAccount.status === "pending" ? "Pending review" : existingAccount.status}
+          </span>
         ) : (
           <button className="btn btn-invest" onClick={onInvest}>
             Invest Now
@@ -235,13 +237,16 @@ export default function ResultsPanel({
 
         {accounts.length > 0 && (
           <div className="active-accounts card card--pop-in">
-            <h3 className="form-section__title">Your active accounts</h3>
+            <h3 className="form-section__title">Your accounts</h3>
             {accounts.map((acc) => (
               <div key={acc.account_id} className="active-account-row">
                 <div className="active-account-row__main">
                   <strong>{acc.product_name}</strong>
                   <span className="active-account-row__meta">
                     {acc.tax_wrapper.replace(/_/g, " ")} · {acc.portfolio_name}
+                  </span>
+                  <span className={`pill pill--${acc.status} active-account-row__status`}>
+                    {acc.status === "pending" ? "Pending review" : acc.status}
                   </span>
                   {acc.beneficiary_name && (
                     <span className="active-account-row__meta">Beneficiary: {acc.beneficiary_name}</span>
@@ -305,7 +310,7 @@ export default function ResultsPanel({
           onClose={() => setApplicationTarget(null)}
           onOpened={(account) => {
             onAccountOpened?.(account);
-            setToastMessage(`${account.product_name} is now active on your profile.`);
+            setToastMessage(`${account.product_name} submitted — pending review.`);
           }}
         />
       )}

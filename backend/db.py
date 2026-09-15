@@ -275,6 +275,7 @@ def seed_catalog() -> None:
             batch.put_item(
                 Item={
                     "portfolio_id": portfolio_id,
+                    "key": p["key"],
                     "name": p["name"],
                     "provider": p["provider"],
                     "risk_band": p["risk_band"],

@@ -15,14 +15,16 @@ const ChatPanel = forwardRef(function ChatPanel(
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [pendingRiskWidget, setPendingRiskWidget] = useState(null);
-  const [isListening, setIsListening] = useState(false);
-  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const [intakeProgress, setIntakeProgress] = useState(null); // { completed, total } | null
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
+  const textareaRef = useRef(null);
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
   const transcriptRef = useRef("");
+  const voiceModeRef = useRef(false);
+  const autoNudgeFiredRef = useRef(false);
 
   const authHeaders = () => (authToken ? { Authorization: `Bearer ${authToken}` } : {});
 
@@ -55,16 +57,33 @@ const ChatPanel = forwardRef(function ChatPanel(
     };
   }, []);
 
+  // Auto-grow the composer textarea to fit what's typed, instead of
+  // scrolling the text sideways/cutting it off — capped so a very long
+  // paste doesn't take over the screen; it scrolls internally past that.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  }, [input]);
+
+  // Once results are shown, simulate a proactive "we noticed you have
+  // spare cash" check a couple of seconds in — this replaces the old
+  // manual money-icon trigger, which people couldn't tell the purpose
+  // of. Fires at most once per results view.
+  useEffect(() => {
+    if (!hasResults || !sessionId || autoNudgeFiredRef.current) return;
+    autoNudgeFiredRef.current = true;
+    const t = setTimeout(() => {
+      sendRawRef.current?.("It's the end of the month — can you check if I have any spare cash to invest?", undefined, true);
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [hasResults, sessionId]);
+
   const sendRawRef = useRef(null);
 
-  const toggleListening = () => {
+  const startListening = () => {
     if (!SpeechRecognitionAPI) return;
-
-    if (isListening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-
     transcriptRef.current = "";
     const recognition = new SpeechRecognitionAPI();
     recognition.lang = "en-US";
@@ -80,28 +99,61 @@ const ChatPanel = forwardRef(function ChatPanel(
       setInput(transcript);
     };
 
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = () => {
+      recognitionRef.current = null;
+      if (voiceModeRef.current) {
+        // Transient errors (e.g. a brief silence timeout) shouldn't
+        // drop the whole conversation out of voice mode — just retry.
+        setTimeout(() => {
+          if (voiceModeRef.current) startListening();
+        }, 800);
+      }
+    };
 
     recognition.onend = () => {
-      setIsListening(false);
+      recognitionRef.current = null;
       const finalText = transcriptRef.current.trim();
+      setInput("");
       if (finalText) {
-        setInput("");
         sendRawRef.current?.(finalText);
+        // Listening resumes automatically once the reply has been
+        // spoken — see speakText's onended handler below.
+      } else if (voiceModeRef.current) {
+        setTimeout(() => {
+          if (voiceModeRef.current) startListening();
+        }, 500);
       }
     };
 
     try {
       recognition.start();
       recognitionRef.current = recognition;
-      setIsListening(true);
     } catch {
-      setIsListening(false);
+      // Already running or briefly unavailable — the retry paths above cover it.
     }
   };
 
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+  };
+
+  const toggleVoiceMode = () => {
+    setVoiceMode((v) => {
+      const next = !v;
+      voiceModeRef.current = next;
+      if (next) {
+        startListening();
+      } else {
+        stopListening();
+        audioRef.current?.pause();
+      }
+      return next;
+    });
+  };
+
   const speakText = async (text) => {
-    if (!voiceOutputEnabled || !text) return;
+    if (!voiceModeRef.current || !text) return;
     try {
       audioRef.current?.pause();
       const res = await fetch(`${API_BASE}/tts`, {
@@ -117,7 +169,13 @@ const ChatPanel = forwardRef(function ChatPanel(
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        // Continue the voice conversation: listen again once the
+        // reply has finished playing, unless voice mode was turned
+        // off while it was speaking.
+        if (voiceModeRef.current) startListening();
+      };
       audioRef.current = audio;
       try {
         await audio.play();
@@ -129,8 +187,10 @@ const ChatPanel = forwardRef(function ChatPanel(
     }
   };
 
-  const handleTurnResponse = (data) => {
-    setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
+  const handleTurnResponse = (data, silent) => {
+    if (!silent) {
+      setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
+    }
     speakText(data.reply);
     setIntakeProgress(data.intake_progress || null);
     if (data.risk_widget) {
@@ -167,10 +227,16 @@ const ChatPanel = forwardRef(function ChatPanel(
     }
   };
 
-  const sendRaw = async (text, overrideSessionId) => {
+  // `silent`: used by the automatic end-of-month nudge check — the
+  // trigger phrase itself isn't shown as a user bubble (it wasn't
+  // something the person actually said), but the AI's reply/nudge
+  // still shows normally if it finds something worth mentioning.
+  const sendRaw = async (text, overrideSessionId, silent) => {
     const sid = overrideSessionId ?? sessionId;
-    setMessages((m) => [...m, { role: "user", text }]);
-    setSending(true);
+    if (!silent) {
+      setMessages((m) => [...m, { role: "user", text }]);
+    }
+    setSending(!silent ? true : sending);
     setError(null);
     try {
       const res = await fetch(`${API_BASE}/chat/sessions/${sid}/messages`, {
@@ -179,11 +245,11 @@ const ChatPanel = forwardRef(function ChatPanel(
         body: JSON.stringify({ message: text }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Request failed");
-      handleTurnResponse(await res.json());
+      handleTurnResponse(await res.json(), silent);
     } catch (e) {
-      setError(e.message);
+      if (!silent) setError(e.message);
     } finally {
-      setSending(false);
+      if (!silent) setSending(false);
     }
   };
 
@@ -197,7 +263,8 @@ const ChatPanel = forwardRef(function ChatPanel(
       setMessages(newMessages);
       setPendingRiskWidget(null);
       setError(null);
-      setIntakeProgress(null); // a resumed session either already has results, or the next turn will re-report it
+      setIntakeProgress(null);
+      autoNudgeFiredRef.current = false;
     },
 
     startFresh: () => {
@@ -206,6 +273,7 @@ const ChatPanel = forwardRef(function ChatPanel(
       setPendingRiskWidget(null);
       setError(null);
       setIntakeProgress(null);
+      autoNudgeFiredRef.current = false;
       (async () => {
         try {
           const res = await fetch(`${API_BASE}/chat/sessions`, {
@@ -221,19 +289,13 @@ const ChatPanel = forwardRef(function ChatPanel(
       })();
     },
 
-    // Used by the landing page: starts a brand-new session in the
-    // chosen language, and — if the person typed something or tapped a
-    // suggestion pill instead of leaving it blank — immediately sends
-    // that as the first message. Passing the new session id straight
-    // into sendRaw (rather than relying on the sessionId state, which
-    // wouldn't have updated yet inside this same synchronous flow)
-    // avoids sending to a stale/missing session.
     startWithMessage: (text, language) => {
       setSessionId(null);
       setMessages([]);
       setPendingRiskWidget(null);
       setError(null);
       setIntakeProgress(null);
+      autoNudgeFiredRef.current = false;
       (async () => {
         try {
           const res = await fetch(`${API_BASE}/chat/sessions`, {
@@ -303,18 +365,6 @@ const ChatPanel = forwardRef(function ChatPanel(
     } finally {
       setSending(false);
     }
-  };
-
-  const simulateMonthEnd = () => {
-    if (!sessionId || sending) return;
-    sendRaw("It's the end of the month — can you check if I have any spare cash to invest?");
-  };
-
-  const toggleVoiceOutput = () => {
-    setVoiceOutputEnabled((v) => {
-      if (v) audioRef.current?.pause();
-      return !v;
-    });
   };
 
   return (
@@ -387,45 +437,33 @@ const ChatPanel = forwardRef(function ChatPanel(
             />
           </>
         )}
-        {hasResults && (
-          <button
-            type="button"
-            className="btn btn-ghost chat-panel__upload-btn"
-            onClick={simulateMonthEnd}
-            disabled={!sessionId || sending}
-            title="Simulate month-end balance check"
-          >
-            💰
-          </button>
-        )}
-        <button
-          type="button"
-          className={`btn btn-ghost chat-panel__voice-toggle ${voiceOutputEnabled ? "chat-panel__voice-toggle--active" : ""}`}
-          onClick={toggleVoiceOutput}
-          title={voiceOutputEnabled ? "Turn off spoken replies" : "Turn on spoken replies"}
-        >
-          {voiceOutputEnabled ? "🔊" : "🔇"}
-        </button>
         {SpeechRecognitionAPI && (
           <button
             type="button"
-            className={`btn btn-ghost chat-panel__mic-btn ${isListening ? "chat-panel__mic-btn--active" : ""}`}
-            onClick={toggleListening}
+            className={`btn btn-ghost chat-panel__voice-toggle ${voiceMode ? "chat-panel__voice-toggle--active" : ""}`}
+            onClick={toggleVoiceMode}
             disabled={!sessionId || sending}
-            title={isListening ? "Stop listening (sends automatically)" : "Speak your message"}
+            title={voiceMode ? "End voice conversation" : "Start voice conversation"}
           >
-            {isListening ? "🔴" : "🎤"}
+            {voiceMode ? "🔴" : "🎙️"}
           </button>
         )}
-        <input
+        <textarea
+          ref={textareaRef}
+          rows={1}
           className="text-input chat-panel__input"
           placeholder={
-            isListening ? "Listening…" : hasResults ? "Ask a question, e.g. what if I invest more?" : "Type your answer…"
+            voiceMode ? "Listening…" : hasResults ? "Ask a question, e.g. what if I invest more?" : "Type your answer…"
           }
           value={input}
           disabled={!sessionId || sending}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendMessage();
+            }
+          }}
         />
         <button className="btn btn-primary" onClick={sendMessage} disabled={!sessionId || sending}>
           Send
