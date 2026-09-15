@@ -354,7 +354,6 @@ def create_portfolio_returns() -> list[dict]:
 
     - asset_class_returns.csv
     - portfolio_weightings.csv
-    - portfolios.csv
 
     For each portfolio and horizon:
 
