@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import Portal from "./Portal";
 
 export default function Toast({ message, onDismiss }) {
   useEffect(() => {
@@ -7,9 +8,11 @@ export default function Toast({ message, onDismiss }) {
   }, [onDismiss]);
 
   return (
-    <div className="toast" role="status">
-      <span className="toast__icon">✓</span>
-      {message}
-    </div>
+    <Portal>
+      <div className="toast" role="status">
+        <span className="toast__icon">✓</span>
+        {message}
+      </div>
+    </Portal>
   );
 }

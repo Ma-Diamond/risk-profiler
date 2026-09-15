@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Portal from "./Portal";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -41,18 +42,34 @@ const emptyForm = {
 
 const emptyBeneficiary = { full_name: "", id_number: "", relationship: "" };
 
+// Every field here has a same-named counterpart in the saved profile
+// (see AccountPage.jsx / GET /auth/me/profile) except relationship,
+// which is specific to a beneficiary and never asked anywhere else —
+// so the merge is a direct key-for-key overlay, nothing to translate.
+function prefillForm(savedProfile) {
+  if (!savedProfile) return { ...emptyForm };
+  const filled = { ...emptyForm };
+  for (const key of Object.keys(emptyForm)) {
+    if (savedProfile[key] !== null && savedProfile[key] !== undefined) {
+      filled[key] = String(savedProfile[key]);
+    }
+  }
+  return filled;
+}
+
 export default function InvestmentApplicationModal({
   product,
   portfolio,
   clientId,
   defaultInitialAmount,
   defaultMonthlyAmount,
+  savedProfile,
   authToken,
   onClose,
   onOpened,
 }) {
   const [step, setStep] = useState("form"); // "form" | "disclaimer" | "success"
-  const [form, setForm] = useState({ ...emptyForm });
+  const [form, setForm] = useState(() => prefillForm(savedProfile));
   const [beneficiary, setBeneficiary] = useState({ ...emptyBeneficiary });
   const [initialAmount, setInitialAmount] = useState(defaultInitialAmount || 0);
   const [monthlyAmount, setMonthlyAmount] = useState(defaultMonthlyAmount || 0);
@@ -106,8 +123,9 @@ export default function InvestmentApplicationModal({
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-card card application-modal">
+    <Portal>
+      <div className="modal-overlay">
+        <div className="modal-card card application-modal">
         {step === "form" && (
           <form onSubmit={goToDisclaimer}>
             <h3 className="modal-card__title">Apply for {product.name}</h3>
@@ -262,7 +280,8 @@ export default function InvestmentApplicationModal({
             </div>
           </>
         )}
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }

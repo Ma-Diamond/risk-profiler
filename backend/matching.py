@@ -89,7 +89,7 @@ def is_eligible(
 
 GOAL_TO_ALLOWED_WRAPPERS: dict[str, set[str]] = {
     "retirement": {"retirement_annuity", "preservation_fund", "discretionary"},
-    "house_deposit": {"discretionary", "tax_free_savings", "investment_policy", "offshore_endowment", "cash_account"},
+    "house_deposit": {"discretionary", "tax_free_savings", "investment_policy", "offshore_endowment", "cash_account", "endowment"},
     "general_growth": {"discretionary", "tax_free_savings", "endowment", "offshore_discretionary", "cash_account"},
 }
 

@@ -120,6 +120,7 @@ export default function ResultsPanel({
   recalculatedNote,
   accounts = [],
   authToken,
+  savedProfile,
   onAccountOpened,
 }) {
   const [toastMessage, setToastMessage] = useState(null);
@@ -299,6 +300,7 @@ export default function ResultsPanel({
           clientId={result.client_id}
           defaultInitialAmount={applicationTarget.initialAmount}
           defaultMonthlyAmount={applicationTarget.monthlyAmount}
+          savedProfile={savedProfile}
           authToken={authToken}
           onClose={() => setApplicationTarget(null)}
           onOpened={(account) => {

@@ -1,19 +1,5 @@
 import { useState } from "react";
-
-// Placeholder mark — a clean generic shield, not a trace of the real
-// Standard Bank logo (that's proprietary artwork; if you have the
-// actual logo file, drop it in and swap this for an <img>).
-function ShieldMark() {
-  return (
-    <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true">
-      <path
-        d="M24 4 L42 10 V22 C42 33 34.5 41.5 24 45 C13.5 41.5 6 33 6 22 V10 Z"
-        fill="var(--accent)"
-      />
-      <path d="M24 4 L42 10 V22 C42 33 34.5 41.5 24 45 Z" fill="var(--accent-ink)" opacity="0.25" />
-    </svg>
-  );
-}
+import ShieldMark from "./ShieldMark";
 
 const LANGUAGES = [
   { code: "en", label: "English", flag: "🇬🇧" },

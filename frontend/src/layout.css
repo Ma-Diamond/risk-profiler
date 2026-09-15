@@ -81,9 +81,9 @@
 .nav-menu { position: relative; }
 
 .nav-menu__trigger {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface);
   display: flex;
@@ -92,6 +92,17 @@
   justify-content: center;
   gap: 4px;
   cursor: pointer;
+  transition: border-color 120ms var(--ease), transform 120ms var(--ease);
+}
+
+.nav-menu__trigger:hover { border-color: var(--accent); }
+.nav-menu__trigger:active { transform: scale(0.96); }
+
+.nav-menu__trigger-avatar {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent-ink);
 }
 
 .nav-menu__bar {
@@ -109,33 +120,94 @@
 
 .nav-menu__dropdown {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 12px);
   right: 0;
-  min-width: 170px;
-  padding: 8px;
+  min-width: 260px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 21;
+  box-shadow: 0 12px 32px rgba(16, 32, 30, 0.14);
+}
+
+.nav-menu__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.nav-menu__header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.nav-menu__header-text strong {
+  font-size: 14.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-menu__header-text span {
+  font-size: 12px;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-menu__items {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  z-index: 21;
+}
+
+.nav-menu__footer {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 6px;
 }
 
 .nav-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   text-align: left;
   background: none;
   border: none;
-  padding: 9px 10px;
+  padding: 12px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  font-size: 14.5px;
+  font-weight: 500;
   color: var(--ink);
   cursor: pointer;
 }
 
+.nav-menu__item-icon {
+  font-size: 17px;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 .nav-menu__item:hover {
-  background: var(--surface-sunken);
+  background: var(--accent-wash);
 }
 
 .nav-menu__item--danger {
   color: #B3261E;
+}
+
+.nav-menu__item--primary {
+  color: var(--accent-ink);
+  font-weight: 700;
 }
 
 /* ============ APP BODY (unified — chat area is always the same
@@ -835,6 +907,59 @@
   font-size: 14px;
 }
 
+.profile-card { max-width: 680px; }
+
+.profile-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.profile-group__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.profile-value {
+  font-size: 14px;
+  color: var(--ink);
+  padding: 8px 0;
+}
+
+@media (max-width: 600px) {
+  .profile-group__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- accounts list page ---- */
+
+.accounts-page__row {
+  align-items: center;
+}
+
+.accounts-page__status {
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.accounts-page__status--active {
+  background: var(--band-3-wash);
+  color: var(--band-3);
+}
+
+.accounts-page__amounts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--accent-ink);
+  text-align: right;
+  flex-shrink: 0;
+}
+
 /* ---- home page ---- */
 
 .home-shell {
@@ -1170,6 +1295,53 @@
   color: var(--ink-muted);
   line-height: 1.5;
   max-width: 40ch;
+}
+
+@media (min-width: 900px) {
+  .landing-content {
+    max-width: 640px;
+    gap: 24px;
+  }
+
+  .landing-mark {
+    width: 84px;
+    height: 84px;
+    border-radius: 26px;
+  }
+
+  .landing-headline {
+    font-size: 38px;
+    line-height: 1.25;
+  }
+
+  .landing-subtext {
+    font-size: 18px;
+    max-width: 48ch;
+  }
+
+  .landing-search {
+    padding: 8px 8px 8px 26px;
+  }
+
+  .landing-search__input {
+    font-size: 17px;
+  }
+
+  .landing-search__submit {
+    width: 46px;
+    height: 46px;
+    font-size: 20px;
+  }
+
+  .landing-pill {
+    font-size: 14.5px;
+    padding: 10px 20px;
+  }
+
+  .landing-language__trigger {
+    font-size: 14.5px;
+    padding: 10px 20px;
+  }
 }
 
 .landing-search {

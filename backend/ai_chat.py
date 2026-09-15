@@ -556,13 +556,16 @@ RECALCULATE_TOOL = {
     "name": "recalculate_investment_projection",
     "description": (
         "Re-runs the full product match for a hypothetical lump sum, monthly contribution, "
-        "or horizon — NOT just recomputed numbers on the same products. A different amount "
-        "can make a product newly eligible (e.g. a bigger lump sum clearing a minimum) or "
-        "drop one that no longer qualifies, so the recommended set itself can change. Call "
-        "this whenever the client asks a 'what if' question about investing a different "
-        "amount or for a different length of time — never estimate this yourself. This is "
-        "a PREVIEW ONLY: nothing is saved to their actual profile unless they explicitly "
-        "ask you to update it, so say so plainly if they seem to think it already saved."
+        "horizon, or even a completely different investment goal — NOT just recomputed "
+        "numbers on the same products. A different amount can make a product newly eligible "
+        "(e.g. a bigger lump sum clearing a minimum) or drop one that no longer qualifies; a "
+        "different goal opens up a different set of tax wrappers entirely. Call this whenever "
+        "the client asks a 'what if' question about investing a different amount, for a "
+        "different length of time, OR about a fundamentally different kind of product/goal "
+        "than their actual profile (e.g. their profile is for retirement but they ask about a "
+        "house deposit product) — never estimate this yourself. This is a PREVIEW ONLY: "
+        "nothing is saved to their actual profile unless they explicitly ask you to update it, "
+        "so say so plainly if they seem to think it already saved."
     ),
     "input_schema": {
         "type": "object",
@@ -578,6 +581,11 @@ RECALCULATE_TOOL = {
             "horizon_years": {
                 "type": "number",
                 "description": "Investment horizon in years to project over — use the original if unchanged",
+            },
+            "investment_goal": {
+                "type": "string",
+                "enum": ["retirement", "house_deposit", "general_growth"],
+                "description": "Only include this if the client is asking about a DIFFERENT goal than their actual profile (e.g. asking about a house deposit product when their profile is for retirement). Omit entirely to keep their actual goal.",
             },
         },
         "required": ["initial_amount", "monthly_amount", "horizon_years"],

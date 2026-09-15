@@ -312,6 +312,52 @@ class ProfileDetailOut(BaseModel):
     accounts: list[AccountOut] = []
 
 
+class UserProfileOut(BaseModel):
+    """The full saved-profile blob on a user's account — both the
+    "stable" fields reused across risk-profiling sessions (age,
+    dependents, income, etc.) and the KYC/banking fields normally only
+    captured during an Invest Now application. Having these editable
+    directly, in one place, means neither flow has to start blank if
+    the person already told us this once."""
+
+    full_name: str | None = None
+    age: int | None = None
+    dependents: int | None = None
+    gross_monthly_income: float | None = None
+    monthly_expenses: float | None = None
+    knowledge_score: int | None = None
+    id_number: str | None = None
+    date_of_birth: str | None = None
+    address: str | None = None
+    contact_number: str | None = None
+    email: str | None = None
+    bank_name: str | None = None
+    bank_account_number: str | None = None
+    branch_code: str | None = None
+
+
+class UserProfileUpdateIn(BaseModel):
+    """Same shape as UserProfileOut, all optional — a PUT here is a
+    partial merge (only fields actually sent are updated), not a full
+    overwrite, so editing just your phone number doesn't blank out
+    your bank details."""
+
+    full_name: str | None = None
+    age: int | None = None
+    dependents: int | None = None
+    gross_monthly_income: float | None = None
+    monthly_expenses: float | None = None
+    knowledge_score: int | None = None
+    id_number: str | None = None
+    date_of_birth: str | None = None
+    address: str | None = None
+    contact_number: str | None = None
+    email: str | None = None
+    bank_name: str | None = None
+    bank_account_number: str | None = None
+    branch_code: str | None = None
+
+
 # ---------------------------------------------------------------------
 # Item -> dataclass helpers
 # ---------------------------------------------------------------------
@@ -611,11 +657,7 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: str | No
             "monthly_expenses": monthly_expenses,
             "knowledge_score": payload.knowledge_score,
         }
-        db.USERS.update_item(
-            Key={"email": user_id},
-            UpdateExpression="SET saved_profile = :sp",
-            ExpressionAttributeValues={":sp": json.dumps(stable_fields)},
-        )
+        _merge_into_saved_profile(user_id, stable_fields)
 
     portfolio_items_by_id = {int(item["portfolio_id"]): item for item in _load_all_portfolios()}
     portfolios_by_id = {pid: _item_to_portfolio(item) for pid, item in portfolio_items_by_id.items()}
@@ -779,6 +821,26 @@ def _load_saved_known_context(user_id: str) -> dict:
     return {}
 
 
+def _merge_into_saved_profile(user_id: str, updates: dict) -> dict:
+    """Merges `updates` (only keys with a non-None value are applied)
+    into the user's saved_profile blob and writes it back. Used
+    whenever any flow — finishing a risk profile, opening an account,
+    or editing the profile page directly — learns something durable
+    about the person; always a merge, never a blind overwrite, so one
+    flow's fields never blank out another's."""
+    existing_item = db.USERS.get_item(Key={"email": user_id}).get("Item")
+    existing = json.loads(existing_item["saved_profile"]) if existing_item and existing_item.get("saved_profile") else {}
+    for key, value in updates.items():
+        if value is not None:
+            existing[key] = value
+    db.USERS.update_item(
+        Key={"email": user_id},
+        UpdateExpression="SET saved_profile = :sp",
+        ExpressionAttributeValues={":sp": json.dumps(existing)},
+    )
+    return existing
+
+
 @app.post("/chat/sessions", response_model=ChatStartOut)
 def start_chat(
     payload: ChatStartIn = ChatStartIn(), user_id: str | None = Depends(get_optional_user_id)
@@ -932,18 +994,22 @@ def _load_product_blurbs(stored_result: dict) -> list[str]:
 
 
 def _rematch_for_hypothetical(
-    stored_result: dict, initial_amount: float, monthly_amount: float, horizon_years: float
+    stored_result: dict, initial_amount: float, monthly_amount: float, horizon_years: float, investment_goal_override: str | None = None
 ) -> list[ProductOut] | None:
     """Genuinely re-runs product matching for a hypothetical "what if"
-    question — a different lump sum, contribution, or horizon can
-    change which products are even eligible (e.g. a bigger lump sum
-    might newly qualify for a product with a high minimum), not just
-    the projected numbers on the products already shown.
+    question — a different lump sum, contribution, horizon, or even
+    GOAL can change which products are even eligible (e.g. a bigger
+    lump sum might newly qualify for a product with a high minimum, or
+    a different goal opens up a completely different set of tax
+    wrappers), not just the projected numbers on the products already
+    shown.
 
     Uses the client's STORED bands/goal/emergency-fund (unchanged —
-    this is a preview, not a redo of the whole intake). If horizon
-    changed, horizon_band (and therefore governed_risk_band) is
-    re-derived accordingly, same as a real re-profiling would.
+    this is a preview, not a redo of the whole intake) unless
+    investment_goal_override is given, in which case that goal is used
+    instead for this preview only. If horizon changed, horizon_band
+    (and therefore governed_risk_band) is re-derived accordingly, same
+    as a real re-profiling would.
 
     Returns None if the stored profile predates investment_goal/
     emergency_fund_months being recorded — an older profile can't be
@@ -951,7 +1017,7 @@ def _rematch_for_hypothetical(
     crashing; the caller falls back to explaining that a fresh profile
     is needed for this feature.
     """
-    investment_goal = stored_result.get("investment_goal")
+    investment_goal = investment_goal_override or stored_result.get("investment_goal")
     emergency_fund_months = stored_result.get("emergency_fund_months")
     if investment_goal is None or emergency_fund_months is None:
         return None
@@ -1025,6 +1091,7 @@ def _handle_post_results_turn(session_id: int, stored_result: dict, user_content
             tool_input["initial_amount"],
             tool_input["monthly_amount"],
             tool_input["horizon_years"],
+            investment_goal_override=tool_input.get("investment_goal"),
         )
         if new_products is None:
             return {
@@ -1265,6 +1332,37 @@ def get_me(user_id: str = Depends(require_user_id)) -> UserOut:
     return UserOut(id=item["email"], email=item["email"], full_name=item.get("full_name"))
 
 
+@app.get("/auth/me/profile", response_model=UserProfileOut)
+def get_my_profile(user_id: str = Depends(require_user_id)) -> UserProfileOut:
+    saved = _load_saved_known_context(user_id)
+    return UserProfileOut(**saved)
+
+
+@app.put("/auth/me/profile", response_model=UserProfileOut)
+def update_my_profile(payload: UserProfileUpdateIn, user_id: str = Depends(require_user_id)) -> UserProfileOut:
+    merged = _merge_into_saved_profile(user_id, payload.model_dump())
+    return UserProfileOut(**merged)
+
+
+@app.get("/accounts/mine", response_model=list[AccountOut])
+def list_my_accounts(user_id: str = Depends(require_user_id)) -> list[AccountOut]:
+    """Every account this person has opened, across every risk profile
+    they've ever completed — not scoped to one client_id, since a
+    person may have redone their profile (and so has more than one
+    client_id) over time. The Accounts table only has a by-client GSI,
+    so this is a full scan filtered client-side; fine at hackathon
+    scale, would want a by-user GSI before this saw real traffic."""
+    items: list[dict] = []
+    resp = db.ACCOUNTS.scan()
+    items.extend(resp["Items"])
+    while "LastEvaluatedKey" in resp:
+        resp = db.ACCOUNTS.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+        items.extend(resp["Items"])
+    mine = [a for a in items if a.get("user_id") == user_id]
+    mine.sort(key=lambda a: a["created_at"], reverse=True)
+    return [_account_item_to_out(a) for a in mine]
+
+
 @app.get("/profiles", response_model=list[ProfileSummaryOut])
 def list_profiles(user_id: str = Depends(require_user_id)) -> list[ProfileSummaryOut]:
     resp = db.CLIENTS.query(
@@ -1324,33 +1422,32 @@ def get_profile(client_id: int, user_id: str = Depends(require_user_id)) -> Prof
     return ProfileDetailOut(chat_session_id=chat_session_id, profile_result=profile_result, accounts=accounts)
 
 
+def _account_item_to_out(a: dict) -> AccountOut:
+    beneficiary_name = None
+    if a.get("beneficiary"):
+        beneficiary_name = json.loads(a["beneficiary"])["full_name"]
+    return AccountOut(
+        account_id=int(a["account_id"]),
+        client_id=int(a["client_id"]),
+        product_id=int(a["product_id"]),
+        product_name=a["product_name"],
+        portfolio_id=int(a["portfolio_id"]),
+        portfolio_name=a["portfolio_name"],
+        tax_wrapper=a["tax_wrapper"],
+        initial_amount=db.num(a["initial_amount"]),
+        monthly_amount=db.num(a["monthly_amount"]),
+        status=a["status"],
+        created_at=a["created_at"],
+        beneficiary_name=beneficiary_name,
+    )
+
+
 def _load_accounts_for_client(client_id: int) -> list[AccountOut]:
     resp = db.ACCOUNTS.query(
         IndexName="by-client",
         KeyConditionExpression=Key("client_id").eq(client_id),
     )
-    accounts = []
-    for a in resp["Items"]:
-        beneficiary_name = None
-        if a.get("beneficiary"):
-            beneficiary_name = json.loads(a["beneficiary"])["full_name"]
-        accounts.append(
-            AccountOut(
-                account_id=int(a["account_id"]),
-                client_id=int(a["client_id"]),
-                product_id=int(a["product_id"]),
-                product_name=a["product_name"],
-                portfolio_id=int(a["portfolio_id"]),
-                portfolio_name=a["portfolio_name"],
-                tax_wrapper=a["tax_wrapper"],
-                initial_amount=db.num(a["initial_amount"]),
-                monthly_amount=db.num(a["monthly_amount"]),
-                status=a["status"],
-                created_at=a["created_at"],
-                beneficiary_name=beneficiary_name,
-            )
-        )
-    return accounts
+    return [_account_item_to_out(a) for a in resp["Items"]]
 
 
 @app.post("/accounts", response_model=AccountOut)
@@ -1425,6 +1522,25 @@ def open_account(payload: AccountApplicationIn, user_id: str = Depends(require_u
             ":bn": payload.bank_name,
             ":ban": payload.bank_account_number,
             ":bc": payload.branch_code,
+        },
+    )
+
+    # Also save the KYC/banking details onto the user's own saved
+    # profile (not just the client record) — so the next chat intake
+    # or Invest Now application doesn't start blank if we already have
+    # this from a previous application.
+    _merge_into_saved_profile(
+        user_id,
+        {
+            "full_name": payload.full_name,
+            "id_number": payload.id_number,
+            "date_of_birth": payload.date_of_birth,
+            "address": payload.address,
+            "contact_number": payload.contact_number,
+            "email": payload.email,
+            "bank_name": payload.bank_name,
+            "bank_account_number": payload.bank_account_number,
+            "branch_code": payload.branch_code,
         },
     )
 

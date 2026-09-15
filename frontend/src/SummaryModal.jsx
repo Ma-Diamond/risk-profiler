@@ -1,3 +1,5 @@
+import Portal from "./Portal";
+
 const GOAL_LABELS = {
   retirement: "Retirement",
   house_deposit: "House deposit",
@@ -24,8 +26,9 @@ export default function SummaryModal({ summary, onConfirm, onClose }) {
     .join(", ");
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card card summary-modal" onClick={(e) => e.stopPropagation()}>
+    <Portal>
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-card card summary-modal" onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-card__title">Does this look right?</h3>
         <p className="step-subtitle">Here's everything gathered so far — check it over.</p>
 
@@ -68,7 +71,8 @@ export default function SummaryModal({ summary, onConfirm, onClose }) {
             Looks good — continue
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }

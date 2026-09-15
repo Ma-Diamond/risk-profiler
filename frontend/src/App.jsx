@@ -6,7 +6,9 @@ import AuthForm from "./AuthForm";
 import ProfileHistory from "./ProfileHistory";
 import LandingPage from "./LandingPage";
 import AccountPage from "./AccountPage";
+import AccountsPage from "./AccountsPage";
 import NavMenu from "./NavMenu";
+import ShieldMark from "./ShieldMark";
 import "./tokens.css";
 import "./global.css";
 import "./layout.css";
@@ -34,6 +36,19 @@ export default function App() {
   const [authToken, setAuthToken] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [savedProfile, setSavedProfile] = useState(null);
+
+  const fetchSavedProfile = async (token) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/me/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setSavedProfile(await res.json());
+    } catch {
+      // Prepopulation is a convenience, not a requirement — the forms
+      // just fall back to starting blank if this fails.
+    }
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -50,6 +65,7 @@ export default function App() {
         const user = await res.json();
         setAuthToken(stored);
         setCurrentUser(user);
+        fetchSavedProfile(stored);
       } catch {
         localStorage.removeItem(TOKEN_STORAGE_KEY);
       } finally {
@@ -73,6 +89,11 @@ export default function App() {
 
   const handleAccountOpened = (account) => {
     setAccounts((prev) => [...prev, account]);
+    // Opening an account also saves the KYC/banking details the client
+    // just typed onto their saved profile server-side — refresh our
+    // copy so a second Invest Now (or a visit to the profile page) in
+    // this same session is prefilled with it too, not just next login.
+    if (authToken) fetchSavedProfile(authToken);
   };
 
   const handleSummaryConfirm = () => {
@@ -84,6 +105,7 @@ export default function App() {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     setAuthToken(token);
     setCurrentUser(user);
+    fetchSavedProfile(token);
     setView("home");
     setResult(null);
     setRecalculatedProducts(null);
@@ -162,20 +184,11 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <button type="button" className="app-header__brand" onClick={() => setView("home")}>
-          <span className="app-header__mark" aria-hidden="true" />
+          <ShieldMark size={26} />
           <span className="app-header__name">Standard Bank</span>
         </button>
         <div className="app-header__right">
           <span className="app-header__product">AI Financial Guide</span>
-          <button
-            type="button"
-            className="app-header__avatar"
-            onClick={() => setView("account")}
-            aria-label="Account"
-            title="Account"
-          >
-            {currentUser?.full_name?.[0]?.toUpperCase() || "👤"}
-          </button>
           <NavMenu currentUser={currentUser} onNavigate={setView} onLogout={handleLogout} />
         </div>
       </header>
@@ -192,6 +205,7 @@ export default function App() {
               recalculatedNote={recalculatedNote}
               accounts={accounts}
               authToken={authToken}
+              savedProfile={savedProfile}
               onAccountOpened={handleAccountOpened}
             />
           </main>
@@ -232,6 +246,10 @@ export default function App() {
           onLogout={handleLogout}
           onGoToLogin={() => setView("login")}
         />
+      )}
+
+      {view === "accounts" && (
+        <AccountsPage authToken={authToken} onBack={() => setView("home")} />
       )}
 
       {view === "login" && (
