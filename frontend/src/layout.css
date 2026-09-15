@@ -44,6 +44,70 @@
 .app-header__name { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--ink); }
 .app-header__product { font-size: 12.5px; color: var(--ink-muted); font-weight: 500; }
 
+/* ---- talk to an advisor ---- */
+
+.advisor-button { position: relative; }
+
+.advisor-button__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms var(--ease), background 120ms var(--ease);
+}
+
+.advisor-button__trigger:hover {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.advisor-button__icon { font-size: 15px; }
+
+@media (max-width: 640px) {
+  .advisor-button__label { display: none; }
+  .advisor-button__trigger { padding: 8px; }
+}
+
+.advisor-popover { max-width: 380px; }
+
+.advisor-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: border-color 120ms var(--ease), background 120ms var(--ease);
+}
+
+.advisor-option:hover {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.advisor-option__icon { font-size: 22px; flex-shrink: 0; }
+
+.advisor-option__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.advisor-option__text strong { font-size: 14px; color: var(--ink); }
+.advisor-option__text span { font-size: 12.5px; color: var(--ink-muted); }
+
 .app-header__right {
   display: flex;
   align-items: center;
@@ -941,8 +1005,37 @@
 
 /* ---- accounts list page ---- */
 
+.accounts-page-card { max-width: 720px; }
+
 .accounts-page__row {
   align-items: center;
+}
+
+.linked-accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.linked-account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.linked-account-card__icon { font-size: 18px; }
+.linked-account-card__name { font-size: 12.5px; color: var(--ink-muted); font-weight: 600; }
+.linked-account-card__balance { font-size: 17px; font-weight: 600; color: var(--accent-ink); }
+.linked-account-card__balance--negative { color: #B3261E; }
+.linked-account-card__limit { font-size: 11px; color: var(--ink-faint); }
+
+@media (max-width: 500px) {
+  .linked-accounts-grid { grid-template-columns: 1fr; }
 }
 
 .pill--pending {

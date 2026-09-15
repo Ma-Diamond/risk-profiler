@@ -595,11 +595,11 @@ RECALCULATE_TOOL = {
 CHECK_SURPLUS_TOOL = {
     "name": "check_monthly_surplus",
     "description": (
-        "Checks whether the client has meaningful spare cash this month, based on "
-        "their known income, expenses, and already-committed monthly investment — "
-        "computed deterministically, don't estimate this yourself. Call this when "
-        "the client asks you to check their balance, simulate month-end, or see if "
-        "they have room to invest more right now."
+        "Checks whether the client has meaningful spare cash right now, based on the NET "
+        "of their everyday (debit) account balance and their credit card balance — what they "
+        "actually have available after what they owe, computed deterministically, don't "
+        "estimate this yourself. Call this when the client asks you to check their balance, "
+        "simulate month-end, or see if they have room to invest more right now."
     ),
     "input_schema": {"type": "object", "properties": {}},
 }
@@ -656,12 +656,13 @@ explain that they'd need to go back and edit their details rather than changing 
 
 CHECKING FOR SPARE CASH: if the client asks you to check their balance, simulate \
 month-end, or see if they have room to invest more, call check_monthly_surplus — this \
-is computed deterministically from their actual income, expenses, and committed \
-monthly investment, never estimate it yourself. If it finds a meaningful surplus, \
-explain it warmly and suggest putting it to work — mention their top pick or a \
-no-lock-in product if one exists among their matches, and note they can ask what that \
-extra amount would grow into. If there's nothing meaningful this time, say so plainly \
-rather than manufacturing urgency where there isn't any.{_language_directive(language)}"""
+is the NET of their everyday account and credit card balances (what they actually have \
+available after what they owe), computed deterministically from their linked accounts, \
+never estimate it yourself. If it finds a meaningful surplus, explain it warmly and \
+suggest putting it to work — mention their top pick or a no-lock-in product if one \
+exists among their matches, and note they can ask what that extra amount would grow \
+into. If there's nothing meaningful this time, say so plainly rather than manufacturing \
+urgency where there isn't any.{_language_directive(language)}"""
 
 
 # ---------------------------------------------------------------------

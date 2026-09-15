@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -356,6 +357,21 @@ class UserProfileUpdateIn(BaseModel):
     bank_name: str | None = None
     bank_account_number: str | None = None
     branch_code: str | None = None
+
+
+class LinkedAccountOut(BaseModel):
+    """A demo-purposes-only view of the policyholder's OTHER banking
+    relationships (credit card, everyday/debit account, home loan,
+    vehicle finance) — not real balances, but stable per-user demo
+    numbers so the end-of-month surplus check and "My Accounts" page
+    have something real to reference in conversation. balance is
+    signed: positive means money the client has, negative means money
+    owed — so summing balances gives a genuine net position."""
+
+    account_type: str
+    name: str
+    balance: float
+    limit: float | None = None
 
 
 # ---------------------------------------------------------------------
@@ -843,6 +859,41 @@ def _merge_into_saved_profile(user_id: str, updates: dict) -> dict:
     return existing
 
 
+def _generate_demo_linked_accounts(user_id: str) -> list[dict]:
+    """Deterministic per-user demo numbers — not real bank data, but
+    stable across requests for a given user (seeded off their email)
+    rather than re-randomizing every time, so referencing them in
+    conversation stays consistent."""
+    seed = int(hashlib.sha256(user_id.encode()).hexdigest(), 16)
+
+    def pick(low: float, high: float, salt: int) -> float:
+        r = (seed >> salt) % 10000 / 10000
+        return round(low + r * (high - low), 2)
+
+    return [
+        {"account_type": "debit", "name": "Everyday Account", "balance": pick(1500, 26000, 3)},
+        {"account_type": "credit", "name": "Credit Card", "balance": -pick(300, 14000, 11), "limit": 25000.0},
+        {"account_type": "home_loan", "name": "Home Loan", "balance": -pick(380000, 1450000, 19)},
+        {"account_type": "vehicle_finance", "name": "Vehicle Finance", "balance": -pick(75000, 340000, 27)},
+    ]
+
+
+def _load_or_generate_linked_accounts(user_id: str) -> list[dict]:
+    """Generated once per user and stored, not regenerated on every
+    call — so the numbers a client sees stay the same across a
+    session (and across the surplus check vs. the accounts page)."""
+    item = db.USERS.get_item(Key={"email": user_id}).get("Item")
+    if item and item.get("other_accounts"):
+        return json.loads(item["other_accounts"])
+    generated = _generate_demo_linked_accounts(user_id)
+    db.USERS.update_item(
+        Key={"email": user_id},
+        UpdateExpression="SET other_accounts = :oa",
+        ExpressionAttributeValues={":oa": json.dumps(generated)},
+    )
+    return generated
+
+
 @app.post("/chat/sessions", response_model=ChatStartOut)
 def start_chat(
     payload: ChatStartIn = ChatStartIn(), user_id: str | None = Depends(get_optional_user_id)
@@ -1064,7 +1115,7 @@ def _rematch_for_hypothetical(
     )
 
 
-def _handle_post_results_turn(session_id: int, stored_result: dict, user_content, language: str = "en") -> ChatTurnOut:
+def _handle_post_results_turn(session_id: int, stored_result: dict, user_content, language: str = "en", user_id: str | None = None) -> ChatTurnOut:
     history = _load_history(session_id)
 
     recalculated_holder: dict = {"products": None, "note": None}
@@ -1074,16 +1125,16 @@ def _handle_post_results_turn(session_id: int, stored_result: dict, user_content
 
     def executor(tool_name: str, tool_input: dict) -> dict:
         if tool_name == "check_monthly_surplus":
-            income = stored_result.get("gross_monthly_income")
-            expenses = stored_result.get("monthly_expenses")
-            committed = stored_result.get("monthly_contribution", 0) or 0
-            if income is None or expenses is None:
-                return {"status": "unavailable"}
-            surplus = round(income - expenses - committed, 2)
-            if surplus <= SURPLUS_NUDGE_THRESHOLD:
-                return {"status": "no_meaningful_surplus", "surplus_amount": surplus}
-            nudge_holder["data"] = {"surplus_amount": surplus}
-            return {"status": "surplus_found", "surplus_amount": surplus}
+            if user_id is None:
+                return {"status": "unavailable", "detail": "No linked accounts to check for a guest session."}
+            linked = _load_or_generate_linked_accounts(user_id)
+            debit = next((a["balance"] for a in linked if a["account_type"] == "debit"), 0.0)
+            credit = next((a["balance"] for a in linked if a["account_type"] == "credit"), 0.0)
+            net = round(debit + credit, 2)
+            if net <= SURPLUS_NUDGE_THRESHOLD:
+                return {"status": "no_meaningful_surplus", "surplus_amount": net}
+            nudge_holder["data"] = {"surplus_amount": net}
+            return {"status": "surplus_found", "surplus_amount": net}
 
         if tool_name != "recalculate_investment_projection":
             return {"status": "unknown_tool"}
@@ -1163,7 +1214,7 @@ def send_chat_message(
 
     try:
         if item.get("finalized_result"):
-            result = _handle_post_results_turn(session_id, json.loads(item["finalized_result"]), payload.message, language=language)
+            result = _handle_post_results_turn(session_id, json.loads(item["finalized_result"]), payload.message, language=language, user_id=user_id)
         else:
             extracted = json.loads(item["extracted_profile"])
             known_context = json.loads(item["known_context"])
@@ -1363,6 +1414,16 @@ def list_my_accounts(user_id: str = Depends(require_user_id)) -> list[AccountOut
     mine = [a for a in items if a.get("user_id") == user_id]
     mine.sort(key=lambda a: a["created_at"], reverse=True)
     return [_account_item_to_out(a) for a in mine]
+
+
+@app.get("/accounts/linked", response_model=list[LinkedAccountOut])
+def list_linked_accounts(user_id: str = Depends(require_user_id)) -> list[LinkedAccountOut]:
+    """The client's other banking relationships (credit, debit, home
+    loan, vehicle finance) — demo values, generated once and stable
+    per user. Shown on the accounts page and referenced by the chat's
+    end-of-month surplus check."""
+    accounts = _load_or_generate_linked_accounts(user_id)
+    return [LinkedAccountOut(**a) for a in accounts]
 
 
 @app.get("/profiles", response_model=list[ProfileSummaryOut])

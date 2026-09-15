@@ -3,30 +3,46 @@ import { useEffect, useState } from "react";
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 function formatRand(value) {
-  return `R${Math.round(value).toLocaleString()}`;
+  const abs = Math.abs(Math.round(value));
+  return `${value < 0 ? "-" : ""}R${abs.toLocaleString()}`;
 }
+
+const LINKED_ACCOUNT_ICONS = {
+  debit: "💳",
+  credit: "🪪",
+  home_loan: "🏠",
+  vehicle_finance: "🚗",
+};
 
 // Every investment account this person has opened, across every risk
 // profile they've ever completed — not scoped to one profile, since
 // redoing a profile creates a new one but past accounts stay real.
+// Also shows their other linked banking relationships (demo values)
+// so the app has something concrete to reference in conversation.
 export default function AccountsPage({ authToken, onBack }) {
   const [accounts, setAccounts] = useState(null);
+  const [linked, setLinked] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!authToken) return;
-    fetch(`${API_BASE}/accounts/mine`, { headers: { Authorization: `Bearer ${authToken}` } })
+    const headers = { Authorization: `Bearer ${authToken}` };
+    fetch(`${API_BASE}/accounts/mine`, { headers })
       .then((r) => {
         if (!r.ok) throw new Error("Couldn't load your accounts");
         return r.json();
       })
       .then(setAccounts)
       .catch((e) => setError(e.message));
+    fetch(`${API_BASE}/accounts/linked`, { headers })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setLinked)
+      .catch(() => setLinked([]));
   }, [authToken]);
 
   return (
     <div className="history-shell">
-      <div className="history-card card">
+      <div className="history-card card accounts-page-card">
         <div className="history-card__header">
           <h2>My accounts</h2>
           <button className="btn btn-ghost" onClick={onBack}>
@@ -36,11 +52,33 @@ export default function AccountsPage({ authToken, onBack }) {
 
         {error && <p className="field-error">{error}</p>}
 
+        {linked && linked.length > 0 && (
+          <>
+            <p className="form-section__title">Your linked accounts</p>
+            <div className="linked-accounts-grid">
+              {linked.map((acc) => (
+                <div key={acc.account_type} className="linked-account-card">
+                  <span className="linked-account-card__icon">{LINKED_ACCOUNT_ICONS[acc.account_type] || "🏦"}</span>
+                  <span className="linked-account-card__name">{acc.name}</span>
+                  <span className={`linked-account-card__balance mono ${acc.balance < 0 ? "linked-account-card__balance--negative" : ""}`}>
+                    {formatRand(acc.balance)}
+                  </span>
+                  {acc.limit != null && (
+                    <span className="linked-account-card__limit">Limit: {formatRand(acc.limit)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <p className="form-section__title">Your investment accounts</p>
+
         {accounts === null && !error && <p className="step-subtitle">Loading…</p>}
 
         {accounts && accounts.length === 0 && (
           <p className="step-subtitle">
-            No accounts yet — complete a risk profile and use Invest Now to open your first one.
+            No investment accounts yet — complete a risk profile and use Invest Now to open your first one.
           </p>
         )}
 

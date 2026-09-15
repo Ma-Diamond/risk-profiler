@@ -9,6 +9,7 @@ import AccountPage from "./AccountPage";
 import AccountsPage from "./AccountsPage";
 import NavMenu from "./NavMenu";
 import ShieldMark from "./ShieldMark";
+import AdvisorButton from "./AdvisorButton";
 import "./tokens.css";
 import "./global.css";
 import "./layout.css";
@@ -189,6 +190,7 @@ export default function App() {
         </button>
         <div className="app-header__right">
           <span className="app-header__product">AI Financial Guide</span>
+          <AdvisorButton />
           <NavMenu currentUser={currentUser} onNavigate={setView} onLogout={handleLogout} />
         </div>
       </header>
