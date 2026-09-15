@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import uuid
 from datetime import datetime, timezone
 
@@ -392,9 +393,54 @@ def _project(returns_by_portfolio, portfolio_id, fee_pct, initial_amount, monthl
     )
 
 
+_seed_status = {"state": "not_started"}  # not_started | running | done | failed
+
+
+def _run_seeding() -> None:
+    _seed_status["state"] = "running"
+    try:
+        db.seed_catalog()
+        _seed_status["state"] = "done"
+    except Exception as e:
+        # Seeding failing shouldn't take the whole app down — the API
+        # still starts and serves what it can (catalog just stays
+        # empty until this is retried). /admin/seed-status surfaces the
+        # failure directly instead of it being a silent, hard-to-find gap.
+        _seed_status["state"] = "failed"
+        _seed_status["error"] = str(e)
+        print(f"Background seeding failed: {e}")
+
+
 @app.on_event("startup")
 def startup() -> None:
-    db.init_db(seed=True)
+    # Table creation is fast (a handful of DDL calls) — stays
+    # synchronous so the app never starts serving before its tables
+    # exist. Seeding the real fund catalog is NOT fast (~8,700+
+    # DynamoDB writes, can take a couple of minutes on a cold start),
+    # so it runs in a background thread instead of blocking here —
+    # blocking was putting it at the mercy of gunicorn's worker
+    # timeout AND Elastic Beanstalk's health-check grace period,
+    # either of which could (and did) kill the process mid-seed.
+    db.ensure_tables_exist()
+    threading.Thread(target=_run_seeding, daemon=True).start()
+
+
+@app.get("/admin/seed-status")
+def seed_status() -> dict:
+    """Check seeding progress directly instead of digging through AWS
+    console item counts (which are only periodically updated anyway,
+    not real-time) or EB logs. Cheap Scan(Limit=1) checks per table —
+    fine to call occasionally, not meant for polling in a loop."""
+    portfolios_have_items = bool(db.PORTFOLIOS.scan(Limit=1).get("Items"))
+    products_have_items = bool(db.PRODUCTS.scan(Limit=1).get("Items"))
+    returns_have_items = bool(db.PORTFOLIO_RETURNS.scan(Limit=1).get("Items"))
+    return {
+        "background_task_state": _seed_status["state"],
+        "error": _seed_status.get("error"),
+        "portfolios_seeded": portfolios_have_items,
+        "products_seeded": products_have_items,
+        "portfolio_returns_seeded": returns_have_items,
+    }
 
 
 # ---------------------------------------------------------------------

@@ -220,11 +220,21 @@ def _create_missing_tables() -> None:
             waiter.wait(TableName=table_def["TableName"])
 
 
-def init_db(seed: bool = True) -> None:
+def ensure_tables_exist() -> None:
+    """Creates any missing tables — fast (a handful of DDL calls plus
+    waiters), safe to run synchronously at startup. Deliberately
+    separate from seed_catalog(): callers should always call this one
+    inline (blocking) before the app starts serving requests, and can
+    run seed_catalog() in the background, since that one does
+    thousands of item writes and can legitimately take minutes."""
     _create_missing_tables()
-    if not seed:
-        return
 
+
+def seed_catalog() -> None:
+    """Writes the portfolio/product/returns catalog from the CSVs —
+    the slow part (thousands of DynamoDB writes for the real fund
+    universe). Safe to call from a background thread; ensure_tables_exist()
+    must have already run (this doesn't create tables itself)."""
     # Only seed once — if Portfolios already has items, assume this
     # environment has already been seeded (matches the old "SELECT
     # COUNT(*)" guard).
@@ -306,7 +316,7 @@ def init_db(seed: bool = True) -> None:
         for key, points in SEED_PORTFOLIO_RETURNS.items():
             portfolio_id = portfolio_key_to_id.get(key)
             if portfolio_id is None:
-                print(f"db.init_db: skipping returns for unknown portfolio_key '{key}'")
+                print(f"db.seed_catalog: skipping returns for unknown portfolio_key '{key}'")
                 continue
             for horizon, expected, lower, upper in points:
                 batch.put_item(
@@ -319,3 +329,13 @@ def init_db(seed: bool = True) -> None:
                         "methodology": methodology,
                     }
                 )
+
+
+def init_db(seed: bool = True) -> None:
+    """Kept for backward compatibility / simple scripts (e.g. a local
+    dev run) that want table-creation and seeding together, blocking,
+    in one call. The running app itself calls ensure_tables_exist() and
+    seed_catalog() separately — see main.py's startup event for why."""
+    ensure_tables_exist()
+    if seed:
+        seed_catalog()
