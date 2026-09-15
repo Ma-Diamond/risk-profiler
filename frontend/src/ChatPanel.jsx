@@ -42,6 +42,12 @@ const ChatPanel = forwardRef(function ChatPanel(
   const scrollRef = useRef(null);
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
+  // React state updated inside recognition.onresult isn't visible to
+  // recognition.onend's closure (it captures the value from when
+  // toggleListening was called, not the latest) — this ref is the
+  // reliable way to know the final transcript at the moment listening
+  // actually stops, whether from silence or a manual click.
+  const transcriptRef = useRef("");
 
   const authHeaders = () => (authToken ? { Authorization: `Bearer ${authToken}` } : {});
 
@@ -75,14 +81,17 @@ const ChatPanel = forwardRef(function ChatPanel(
     };
   }, []);
 
+  const sendRawRef = useRef(null); // set below, once sendRaw exists — onend needs to call it
+
   const toggleListening = () => {
     if (!SpeechRecognitionAPI) return;
 
     if (isListening) {
-      recognitionRef.current?.stop();
+      recognitionRef.current?.stop(); // triggers onend below, which sends whatever was heard
       return;
     }
 
+    transcriptRef.current = "";
     const recognition = new SpeechRecognitionAPI();
     recognition.lang = "en-US";
     recognition.continuous = false;
@@ -93,13 +102,23 @@ const ChatPanel = forwardRef(function ChatPanel(
       for (let i = 0; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
       }
+      transcriptRef.current = transcript;
       setInput(transcript);
     };
 
-    // Covers both a real error (e.g. mic permission denied) and the
-    // normal "stopped listening" case — either way we're done.
     recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
+
+    // Fires both when speech naturally pauses (silence detection) AND
+    // when the mic button is clicked again to stop manually — either
+    // way, "done talking" means send it.
+    recognition.onend = () => {
+      setIsListening(false);
+      const finalText = transcriptRef.current.trim();
+      if (finalText) {
+        setInput("");
+        sendRawRef.current?.(finalText);
+      }
+    };
 
     try {
       recognition.start();
@@ -114,7 +133,9 @@ const ChatPanel = forwardRef(function ChatPanel(
   // endpoint — deliberately not the browser's built-in speechSynthesis,
   // which sounds noticeably more robotic. Off by default (a full chat
   // narrated aloud on every turn isn't always wanted); the speaker
-  // toggle in the composer turns it on.
+  // toggle in the composer turns it on. Failures are surfaced (not
+  // swallowed) so a broken Polly permission or a browser autoplay
+  // block is visible instead of just silently not speaking.
   const speakText = async (text) => {
     if (!voiceOutputEnabled || !text) return;
     try {
@@ -124,15 +145,27 @@ const ChatPanel = forwardRef(function ChatPanel(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) return; // voice output is a nice-to-have; fail silently rather than surface an error
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        setError(`Voice output failed: ${detail.detail || res.status}`);
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.onended = () => URL.revokeObjectURL(url);
       audioRef.current = audio;
-      audio.play();
-    } catch {
-      // same reasoning — don't let a voice-output hiccup interrupt the chat
+      try {
+        await audio.play();
+      } catch (playErr) {
+        // Browsers can block programmatic audio playback outside a
+        // direct user gesture — surfacing this rather than failing
+        // silently, since otherwise "no voice" looks identical to a
+        // backend/permissions problem.
+        setError(`Voice output couldn't play: ${playErr.message}`);
+      }
+    } catch (e) {
+      setError(`Voice output failed: ${e.message}`);
     }
   };
 
@@ -191,6 +224,8 @@ const ChatPanel = forwardRef(function ChatPanel(
       setSending(false);
     }
   };
+
+  sendRawRef.current = sendRaw;
 
   useImperativeHandle(ref, () => ({
     sendProgrammaticMessage: (text) => sendRaw(text),
@@ -373,7 +408,7 @@ const ChatPanel = forwardRef(function ChatPanel(
             className={`btn btn-ghost chat-panel__mic-btn ${isListening ? "chat-panel__mic-btn--active" : ""}`}
             onClick={toggleListening}
             disabled={!sessionId || sending}
-            title={isListening ? "Stop listening" : "Speak your message"}
+            title={isListening ? "Stop listening (sends automatically)" : "Speak your message"}
           >
             {isListening ? "🔴" : "🎤"}
           </button>
