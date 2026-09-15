@@ -7,22 +7,133 @@ function formatRand(value) {
   return `R${Math.round(value).toLocaleString()}`;
 }
 
+const INITIAL_VISIBLE_PRODUCTS = 3;
+
+function ProductCard({ product, isTop, existingAccount, onInvest, style }) {
+  return (
+    <div
+      className={`portfolio-card card card--stagger-in ${product.is_top_pick ? "product-card--top-pick" : ""}`}
+      style={style}
+    >
+      <div className="portfolio-card__header">
+        <div className="product-card__heading-row">
+          {product.is_top_pick && <span className="top-pick-badge">Top pick</span>}
+          <strong>{product.name}</strong>
+          <span className="product-row__wrapper">{product.tax_wrapper.replace(/_/g, " ")}</span>
+        </div>
+      </div>
+
+      {product.is_top_pick && product.top_pick_reason && (
+        <p className="product-row__top-reason">{product.top_pick_reason}</p>
+      )}
+
+      {product.reasons.length > 0 && (
+        <div className="product-row__tags">
+          {product.reasons.map((reason) => (
+            <span key={reason} className="reason-tag">
+              {reason}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {product.total_expected_value != null && (
+        <div className="projection-box mono">
+          <span className="projection-box__expected">{formatRand(product.total_expected_value)}</span>
+          <span className="projection-box__range">
+            {formatRand(product.total_lower_value)} – {formatRand(product.total_upper_value)}
+          </span>
+        </div>
+      )}
+
+      <div className="product-row__stats mono">
+        <span>{product.total_fee_pct}% effective fee</span>
+        <span>R{product.min_initial_investment.toLocaleString()} min lump sum</span>
+        <span>R{product.min_monthly_investment.toLocaleString()} min monthly</span>
+        <span>{product.min_term_years > 0 ? `${product.min_term_years}y lock-in` : "no lock-in"}</span>
+      </div>
+
+      {/* A client holds several portfolios inside one product, splitting
+          contributions between them — this is that recommended split,
+          weighted toward the best-fit portfolio with smaller shares for
+          diversification. */}
+      <div className="portfolio-split">
+        <p className="portfolio-split__title">Recommended split across portfolios</p>
+        {product.recommended_portfolios.map((rp) => (
+          <div key={rp.portfolio_id} className="portfolio-split__row">
+            <div className="portfolio-split__bar-wrap">
+              <div className="portfolio-split__bar" style={{ width: `${rp.allocation_pct}%` }} />
+            </div>
+            <div className="portfolio-split__main">
+              <div className="portfolio-split__heading">
+                <span className="portfolio-split__name">{rp.portfolio_name}</span>
+                <span className="portfolio-split__pct mono">{rp.allocation_pct}%</span>
+              </div>
+              <span className="portfolio-split__meta mono">
+                {rp.split_initial_amount > 0 && `${formatRand(rp.split_initial_amount)} lump · `}
+                {rp.split_monthly_amount > 0 && `${formatRand(rp.split_monthly_amount)}/mo · `}
+                {rp.fee_pct}% fee
+                {rp.projection && ` · projects to ${formatRand(rp.projection.expected_value)}`}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="product-card__footer">
+        {existingAccount ? (
+          <span className="pill">Active ✓</span>
+        ) : (
+          <button className="btn btn-invest" onClick={onInvest}>
+            Invest Now
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Mostly a display component — the finalize call happens once, in
- * App.jsx, when the chat confirms the profile. "What if" questions are
- * answered by the chat itself; when the chat's recalculation tool
- * fires, App.jsx merges the new numbers into `recalculatedProjections`
- * and this component just reflects whichever is freshest per product.
+ * App.jsx, when the chat confirms the profile.
  *
- * The one piece of real interaction here is "Invest Now" — opening the
- * application modal for a specific product/portfolio. Requires being
- * logged in (an opened account needs a persistent identity), and
- * already-opened accounts (passed in via `accounts`) are shown both
- * as a dedicated section and as a status on the matching product row.
+ * Product-centric: each matched PRODUCT carries its own recommended
+ * SPLIT across one or more portfolios (a client holds several
+ * portfolios inside one product, not one portfolio per product).
+ * Products with no eligible portfolio never reach this component at
+ * all — the backend drops them during matching.
+ *
+ * A "what if" question in chat can return a fully re-matched,
+ * possibly different product set (recalculatedProducts) — this is a
+ * PREVIEW only, never persisted, so it's shown with a clear banner and
+ * a toggle back to the client's actual saved results rather than
+ * silently replacing them.
+ *
+ * Invest Now currently opens an account against the single top-ranked
+ * portfolio in a product's recommended split, not the full multi-
+ * portfolio split — genuinely splitting one application across
+ * several portfolios is a further piece of work beyond this pass.
  */
-export default function ResultsPanel({ result, recalculatedProjections, accounts = [], authToken, onAccountOpened }) {
+export default function ResultsPanel({
+  result,
+  recalculatedProducts,
+  recalculatedNote,
+  accounts = [],
+  authToken,
+  onAccountOpened,
+}) {
   const [toastMessage, setToastMessage] = useState(null);
-  const [applicationTarget, setApplicationTarget] = useState(null); // { product, portfolio } | null
+  const [applicationTarget, setApplicationTarget] = useState(null);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [showingPreview, setShowingPreview] = useState(true);
+
+  const isPreview = recalculatedProducts != null;
+  const displayedProducts = isPreview && showingPreview ? recalculatedProducts : result.matched_products;
+
+  const visibleProducts = showAllProducts
+    ? displayedProducts
+    : displayedProducts.slice(0, INITIAL_VISIBLE_PRODUCTS);
+  const hiddenCount = displayedProducts.length - visibleProducts.length;
 
   const markers = {
     tolerance: result.tolerance_band,
@@ -30,23 +141,20 @@ export default function ResultsPanel({ result, recalculatedProjections, accounts
     horizon: result.horizon_band,
   };
 
-  const projectionFor = (prod) => {
-    const override = recalculatedProjections[`${prod.id}-${prod.portfolio_id}`];
-    return override
-      ? { ...override, isRecalculated: true }
-      : prod.projection
-      ? { ...prod.projection, isRecalculated: false }
-      : null;
-  };
-
   const accountForProduct = (productId) => accounts.find((a) => a.product_id === productId);
 
-  const investNow = (product, portfolio) => {
+  const investNow = (product) => {
     if (!authToken) {
       setToastMessage("Log in first — opening an account needs to be tied to your account.");
       return;
     }
-    setApplicationTarget({ product, portfolio });
+    const topPortfolio = product.recommended_portfolios[0];
+    setApplicationTarget({
+      product,
+      portfolio: { id: topPortfolio.portfolio_id, name: topPortfolio.portfolio_name },
+      initialAmount: topPortfolio.split_initial_amount,
+      monthlyAmount: topPortfolio.split_monthly_amount,
+    });
   };
 
   return (
@@ -102,6 +210,28 @@ export default function ResultsPanel({ result, recalculatedProjections, accounts
           </div>
         </div>
 
+        {isPreview && (
+          <div className="preview-banner card">
+            <p className="preview-banner__text">💡 {recalculatedNote}</p>
+            <div className="preview-banner__toggle">
+              <button
+                type="button"
+                className={`preview-banner__tab ${showingPreview ? "preview-banner__tab--active" : ""}`}
+                onClick={() => setShowingPreview(true)}
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                className={`preview-banner__tab ${!showingPreview ? "preview-banner__tab--active" : ""}`}
+                onClick={() => setShowingPreview(false)}
+              >
+                My actual results
+              </button>
+            </div>
+          </div>
+        )}
+
         {accounts.length > 0 && (
           <div className="active-accounts card card--pop-in">
             <h3 className="form-section__title">Your active accounts</h3>
@@ -125,97 +255,35 @@ export default function ResultsPanel({ result, recalculatedProjections, accounts
           </div>
         )}
 
-        <h3 className="form-section__title">Matched portfolios &amp; products</h3>
-        {result.matched_portfolios.map((p, i) => (
-          <div
-            key={p.id}
-            className="portfolio-card card card--stagger-in"
+        <h3 className="form-section__title">
+          {isPreview && showingPreview ? "Products under this scenario" : "Matched products"}
+        </h3>
+
+        {displayedProducts.length === 0 && (
+          <p className="step-subtitle">
+            No products currently match — capital protection only, or nothing fits these amounts yet.
+          </p>
+        )}
+
+        {visibleProducts.map((product, i) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            existingAccount={accountForProduct(product.id)}
+            onInvest={() => investNow(product)}
             style={{ animationDelay: `${80 + i * 70}ms` }}
-          >
-            <div className="portfolio-card__header">
-              <span className={`portfolio-card__band-dot band-bg-${p.risk_band}`} />
-              <div>
-                <strong>{p.name}</strong>
-                <p className="portfolio-card__meta">
-                  Up to {p.max_equity_pct}% equity · min {p.min_horizon_years}y horizon
-                </p>
-              </div>
-            </div>
-            <p className="portfolio-card__description">{p.description}</p>
-
-            {p.matched_products.length > 0 ? (
-              <div className="product-list">
-                {p.matched_products.map((prod) => {
-                  const projection = projectionFor(prod);
-                  const existingAccount = accountForProduct(prod.id);
-                  return (
-                    <div
-                      key={prod.id}
-                      className={`product-row ${prod.is_top_pick ? "product-row--top-pick" : ""}`}
-                    >
-                      <div className="product-row__main">
-                        <div className="product-row__heading">
-                          {prod.is_top_pick && <span className="top-pick-badge">Top pick</span>}
-                          <strong>{prod.name}</strong>
-                          <span className="product-row__wrapper">{prod.tax_wrapper.replace(/_/g, " ")}</span>
-                        </div>
-
-                        {prod.is_top_pick && prod.top_pick_reason && (
-                          <p className="product-row__top-reason">{prod.top_pick_reason}</p>
-                        )}
-
-                        {prod.reasons.length > 0 && (
-                          <div className="product-row__tags">
-                            {prod.reasons.map((reason) => (
-                              <span key={reason} className="reason-tag">
-                                {reason}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {projection && (
-                          <div className={`projection-box mono ${projection.isRecalculated ? "projection-box--updated" : ""}`}>
-                            {projection.isRecalculated && <span className="projection-box__badge">Updated</span>}
-                            <span className="projection-box__expected">
-                              {formatRand(projection.expected_value)}
-                            </span>
-                            <span className="projection-box__range">
-                              {formatRand(projection.lower_value)} – {formatRand(projection.upper_value)}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="product-row__stats mono">
-                          <span>{prod.total_fee_pct}% fee</span>
-                          <span>R{prod.min_initial_investment.toLocaleString()} min lump sum</span>
-                          <span>R{prod.min_monthly_investment.toLocaleString()} min monthly</span>
-                          <span>{prod.min_term_years > 0 ? `${prod.min_term_years}y lock-in` : "no lock-in"}</span>
-                        </div>
-                      </div>
-
-                      {existingAccount ? (
-                        <span className="pill">Active ✓</span>
-                      ) : (
-                        <button className="btn btn-invest" onClick={() => investNow(prod, p)}>
-                          Invest Now
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="portfolio-card__no-products">
-                Risk-appropriate, but no product here is currently accessible given your
-                available amounts or goal.
-              </p>
-            )}
-          </div>
+          />
         ))}
 
-        {result.matched_portfolios.length === 0 && (
-          <p className="step-subtitle">No portfolios matched — capital protection only.</p>
+        {hiddenCount > 0 && (
+          <button type="button" className="btn btn-ghost show-more-btn" onClick={() => setShowAllProducts(true)}>
+            Show {hiddenCount} more
+          </button>
+        )}
+        {showAllProducts && displayedProducts.length > INITIAL_VISIBLE_PRODUCTS && (
+          <button type="button" className="btn btn-ghost show-more-btn" onClick={() => setShowAllProducts(false)}>
+            Show less
+          </button>
         )}
 
         <p className="projection-disclaimer">
@@ -229,7 +297,8 @@ export default function ResultsPanel({ result, recalculatedProjections, accounts
           product={applicationTarget.product}
           portfolio={applicationTarget.portfolio}
           clientId={result.client_id}
-          defaultMonthlyAmount={result.monthly_contribution}
+          defaultInitialAmount={applicationTarget.initialAmount}
+          defaultMonthlyAmount={applicationTarget.monthlyAmount}
           authToken={authToken}
           onClose={() => setApplicationTarget(null)}
           onOpened={(account) => {

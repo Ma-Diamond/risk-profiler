@@ -5,6 +5,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Now covers the header too, not just the body below it — the
+     header floats on this as a translucent bar rather than sitting
+     on top of it as a separate opaque block. */
+  background: radial-gradient(circle at 50% 0%, var(--accent-wash), var(--bg) 60%);
 }
 
 .app-header {
@@ -12,8 +16,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 28px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   flex-shrink: 0;
   position: relative;
   z-index: 10;
@@ -141,10 +146,6 @@
   flex: 1;
   display: flex;
   min-height: 0;
-  /* Same soft gradient the landing page opens on — carried through so
-     moving from the hero into the conversation doesn't feel like
-     landing in a different, plainer app. */
-  background: radial-gradient(circle at 50% 0%, var(--accent-wash), var(--bg) 60%);
 }
 
 .app-body--intake {
@@ -408,6 +409,140 @@
 }
 
 .product-row__stats { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--ink-faint); }
+
+/* ---- product card (product-centric results) ---- */
+
+.product-card--top-pick { border-color: var(--accent); }
+
+.product-card__heading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 15px;
+}
+
+.product-card__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* ---- recommended portfolio split within a product ---- */
+
+.portfolio-split {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.portfolio-split__title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  font-weight: 700;
+}
+
+.portfolio-split__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.portfolio-split__bar-wrap {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+
+.portfolio-split__bar {
+  width: 100%;
+  min-height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.portfolio-split__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.portfolio-split__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.portfolio-split__name { font-size: 12.5px; color: var(--ink); font-weight: 500; }
+.portfolio-split__pct { font-size: 12.5px; color: var(--accent-ink); font-weight: 700; flex-shrink: 0; }
+.portfolio-split__meta { font-size: 11px; color: var(--ink-muted); }
+
+/* ---- show more / show less ---- */
+
+.show-more-btn {
+  align-self: center;
+  padding: 8px 20px;
+  font-size: 12.5px;
+}
+
+/* ---- what-if preview banner ---- */
+
+.preview-banner {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--accent-wash);
+  border-color: var(--accent);
+}
+
+.preview-banner__text {
+  font-size: 13px;
+  color: var(--accent-ink);
+  line-height: 1.4;
+  flex: 1;
+  min-width: 200px;
+}
+
+.preview-banner__toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.preview-banner__tab {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.preview-banner__tab--active {
+  background: var(--accent);
+  color: white;
+}
 
 /* ---- projection display ---- */
 
@@ -1001,7 +1136,6 @@
   padding: 32px 24px;
   overflow-y: auto;
   min-height: 0;
-  background: radial-gradient(circle at 50% 0%, var(--accent-wash), var(--bg) 60%);
 }
 
 .landing-content {

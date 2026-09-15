@@ -149,8 +149,8 @@ const ChatPanel = forwardRef(function ChatPanel(
         },
       ]);
     }
-    if (data.recalculated_projections && data.recalculated_projections.length > 0) {
-      onRecalculated(data.recalculated_projections);
+    if (data.recalculated_products) {
+      onRecalculated(data.recalculated_products, data.recalculated_note);
     }
     if (data.nudge) {
       const amount = data.nudge.surplus_amount;

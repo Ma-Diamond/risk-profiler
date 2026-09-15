@@ -18,7 +18,8 @@ const TOKEN_STORAGE_KEY = "risk_profiler_token";
 export default function App() {
   const [sessionId, setSessionId] = useState(null);
   const [result, setResult] = useState(null);
-  const [recalcMap, setRecalcMap] = useState({});
+  const [recalculatedProducts, setRecalculatedProducts] = useState(null);
+  const [recalculatedNote, setRecalculatedNote] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const [activeSummary, setActiveSummary] = useState(null);
@@ -59,22 +60,14 @@ export default function App() {
 
   const handleFinalized = (profileResult) => {
     setResult(profileResult);
-    setRecalcMap({});
+    setRecalculatedProducts(null);
+    setRecalculatedNote(null);
     setAccounts([]);
   };
 
-  const handleRecalculated = (list) => {
-    setRecalcMap((prev) => {
-      const next = { ...prev };
-      list.forEach((item) => {
-        next[`${item.product_id}-${item.portfolio_id}`] = {
-          expected_value: item.expected_value,
-          lower_value: item.lower_value,
-          upper_value: item.upper_value,
-        };
-      });
-      return next;
-    });
+  const handleRecalculated = (products, note) => {
+    setRecalculatedProducts(products);
+    setRecalculatedNote(note);
     setSheetExpanded(true);
   };
 
@@ -93,7 +86,8 @@ export default function App() {
     setCurrentUser(user);
     setView("home");
     setResult(null);
-    setRecalcMap({});
+    setRecalculatedProducts(null);
+    setRecalculatedNote(null);
     setAccounts([]);
     chatRef.current?.startFresh();
   };
@@ -104,7 +98,8 @@ export default function App() {
     setCurrentUser(null);
     setView("home");
     setResult(null);
-    setRecalcMap({});
+    setRecalculatedProducts(null);
+    setRecalculatedNote(null);
     setAccounts([]);
     chatRef.current?.startFresh();
   };
@@ -127,7 +122,8 @@ export default function App() {
 
       chatRef.current?.resumeSession(profileData.chat_session_id, history);
       setResult(profileData.profile_result);
-      setRecalcMap({});
+      setRecalculatedProducts(null);
+      setRecalculatedNote(null);
       setAccounts(profileData.accounts || []);
       setView("chat");
     } catch (e) {
@@ -148,7 +144,8 @@ export default function App() {
   const handleLandingStart = (text, language) => {
     if (result !== null) {
       setResult(null);
-      setRecalcMap({});
+      setRecalculatedProducts(null);
+      setRecalculatedNote(null);
       setAccounts([]);
     }
     chatRef.current?.startWithMessage(text, language);
@@ -191,7 +188,8 @@ export default function App() {
           <main className="results-shell__main">
             <ResultsPanel
               result={result}
-              recalculatedProjections={recalcMap}
+              recalculatedProducts={recalculatedProducts}
+              recalculatedNote={recalculatedNote}
               accounts={accounts}
               authToken={authToken}
               onAccountOpened={handleAccountOpened}

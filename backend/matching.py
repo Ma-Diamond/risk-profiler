@@ -1,10 +1,19 @@
-"""Portfolio matching: hard filters first, then rank by risk_band fit.
+"""Product-centric matching: for each eligible PRODUCT, recommend a
+split of the client's contribution across the eligible PORTFOLIOS it
+offers.
 
-This is deliberately NOT a similarity/distance score across all fields.
-Horizon, liquidity, Reg 28, and knowledge requirements are treated as
-non-negotiable eligibility gates — a portfolio either qualifies or it
-doesn't. Only within the surviving set does risk_band proximity decide
-ordering.
+This reflects how these products actually work in practice — a client
+picks one product (e.g. a retirement annuity) and, within it, can hold
+several underlying portfolios at once, splitting contributions between
+them. It replaced an earlier portfolio-first design (rank portfolios,
+then list which products offer each one), which didn't match reality
+and — worse — could show the same product repeated once per portfolio
+instead of once with its own recommended mix underneath.
+
+Hard filters first, then rank by fit — deliberately NOT a similarity/
+distance score across all fields. Horizon, liquidity, Reg 28, and
+knowledge requirements are non-negotiable eligibility gates; only
+within the surviving set does risk_band proximity decide ordering.
 """
 
 from __future__ import annotations
@@ -39,7 +48,7 @@ def is_eligible(
 ) -> tuple[bool, list[str]]:
     """Returns (eligible, reasons_excluded). reasons_excluded is empty
     when eligible=True, and otherwise lists every failed constraint —
-    useful for showing the adviser/client why a product was excluded."""
+    useful for showing the adviser/client why a portfolio was excluded."""
     reasons: list[str] = []
 
     if portfolio.risk_band > bands.governed_risk_band:
@@ -66,42 +75,16 @@ def is_eligible(
     return (len(reasons) == 0, reasons)
 
 
-def match_portfolios(
-    portfolios: list[Portfolio],
-    bands: BandResult,
-    investment_horizon_years: float,
-    emergency_fund_months: float,
-    investment_goal: str,
-) -> list[Portfolio]:
-    """Returns eligible portfolios ranked closest-risk-band-first.
-
-    Ranking rule: prefer the highest risk_band that still qualifies
-    (i.e. the closest match to the client's governed band from below),
-    so the client isn't defaulted into an unnecessarily conservative
-    option purely because it also happened to pass the filters.
-    """
-    eligible = [
-        p
-        for p in portfolios
-        if is_eligible(
-            p, bands, investment_horizon_years, emergency_fund_months, investment_goal
-        )[0]
-    ]
-    eligible.sort(key=lambda p: (bands.governed_risk_band - p.risk_band, p.name))
-    return eligible
-
-
 # ---------------------------------------------------------------------
 # PRODUCT LAYER
 #
 # Products are generic wrappers, decoupled from any single portfolio —
 # which portfolios a product offers is looked up via
-# product_portfolio_mapping (resolved to `mapped_product_ids` by the
-# caller). The combined fee for a given (product, portfolio) pairing
-# is the wrapper's platform+advice fee PLUS that portfolio's own
-# underlying fee — fee is a property of the pairing, not of either
-# side alone, so it's computed via combined_fee_pct() rather than
-# cached on the Product.
+# product_portfolio_mapping (resolved by the caller into
+# product_id -> [portfolio_id, ...]). The combined fee for a given
+# (product, portfolio) pairing is the wrapper's platform+advice fee
+# PLUS that portfolio's own underlying fee — fee is a property of the
+# pairing, not of either side alone.
 # ---------------------------------------------------------------------
 
 GOAL_TO_ALLOWED_WRAPPERS: dict[str, set[str]] = {
@@ -167,128 +150,159 @@ def is_product_eligible(
     return (len(reasons) == 0, reasons)
 
 
-def match_products(
+# ---------------------------------------------------------------------
+# ALLOCATION — splitting a product's contribution across its eligible
+# portfolios. Weighted toward the best-fit portfolio (closest risk_band
+# match, then lowest fee — same ordering as before), with smaller
+# shares to the rest for diversification. A client who wants a single
+# portfolio at 100% can still say so in the chat; this is the starting
+# recommendation, not a locked-in constraint.
+#
+# How much spread to recommend is goal-dependent: a house deposit has
+# a shorter horizon and less room to ride out a badly-timed portfolio,
+# so it concentrates more; retirement's long horizon gets more spread.
+# ---------------------------------------------------------------------
+MAX_PORTFOLIOS_PER_PRODUCT = 3
+
+ALLOCATION_WEIGHTS_BY_GOAL: dict[str, dict[int, list[float]]] = {
+    "retirement": {1: [1.0], 2: [0.65, 0.35], 3: [0.5, 0.3, 0.2]},
+    "house_deposit": {1: [1.0], 2: [0.8, 0.2], 3: [0.7, 0.2, 0.1]},
+    "general_growth": {1: [1.0], 2: [0.7, 0.3], 3: [0.6, 0.25, 0.15]},
+}
+
+
+def _rank_eligible_portfolios(portfolios: list[Portfolio], governed_risk_band: int) -> list[Portfolio]:
+    """Closest risk_band fit first (prefers the portfolio nearest the
+    client's governed band, from either direction), fee as tiebreaker."""
+    return sorted(portfolios, key=lambda p: (abs(governed_risk_band - p.risk_band), p.underlying_fee_pct))
+
+
+def recommend_portfolio_allocations(
+    eligible_portfolios: list[Portfolio], governed_risk_band: int, investment_goal: str
+) -> list[tuple[Portfolio, float]]:
+    """(portfolio, allocation_pct) pairs for up to MAX_PORTFOLIOS_PER_PRODUCT
+    eligible portfolios, weighted toward the best fit."""
+    ranked = _rank_eligible_portfolios(eligible_portfolios, governed_risk_band)
+    chosen = ranked[:MAX_PORTFOLIOS_PER_PRODUCT]
+    weight_table = ALLOCATION_WEIGHTS_BY_GOAL.get(investment_goal, ALLOCATION_WEIGHTS_BY_GOAL["general_growth"])
+    weights = weight_table.get(len(chosen), [1.0 / len(chosen)] * len(chosen))
+    return [(p, round(w * 100, 1)) for p, w in zip(chosen, weights)]
+
+
+def product_weighted_fee(product: Product, allocations: list[tuple[Portfolio, float]]) -> float:
+    """The product's effective fee across its recommended split —
+    each portfolio's combined fee weighted by its allocation share."""
+    return sum(combined_fee_pct(product, p) * (w / 100) for p, w in allocations)
+
+
+def match_products_with_allocations(
     products: list[Product],
-    portfolio: Portfolio,
-    mapped_product_ids: set[int],
-    investment_goal: str,
+    product_id_to_portfolio_ids: dict[int, list[int]],
+    portfolios_by_id: dict[int, Portfolio],
+    bands: BandResult,
     investment_horizon_years: float,
+    emergency_fund_months: float,
+    investment_goal: str,
     available_lump_sum: float,
     monthly_contribution: float,
-    prioritize_tax_efficient: bool = False,
-) -> list[Product]:
-    """Returns eligible products offering this portfolio, ranked.
-
-    `mapped_product_ids` narrows candidates to products that actually
-    offer this portfolio (from product_portfolio_mapping) before the
-    usual goal/minimums/lock-in filters apply.
-
-    Default ranking is cheapest combined fee first. When
-    prioritize_tax_efficient=True, tax-advantaged wrappers rank ahead
-    of discretionary ones; fee still breaks ties within each group.
-    """
-    candidates = [p for p in products if p.id in mapped_product_ids]
-    eligible = [
-        p
-        for p in candidates
-        if is_product_eligible(
-            p,
-            investment_goal,
-            investment_horizon_years,
-            available_lump_sum,
-            monthly_contribution,
-        )[0]
-    ]
-
-    def fee(p: Product) -> float:
-        return combined_fee_pct(p, portfolio)
-
-    if prioritize_tax_efficient:
-        eligible.sort(
-            key=lambda p: (
-                0 if p.tax_wrapper in TAX_ADVANTAGED_WRAPPERS else 1,
-                fee(p),
-                p.min_initial_investment,
-            )
+) -> list[tuple[Product, list[tuple[Portfolio, float]]]]:
+    """For each product that passes its own eligibility gate AND has at
+    least one eligible portfolio mapped to it, returns the product
+    paired with its recommended portfolio allocation. A product with
+    zero eligible portfolios is dropped entirely — there's no point
+    showing a product the client can't actually invest in through any
+    of its portfolios."""
+    results: list[tuple[Product, list[tuple[Portfolio, float]]]] = []
+    for product in products:
+        product_ok, _ = is_product_eligible(
+            product, investment_goal, investment_horizon_years, available_lump_sum, monthly_contribution
         )
-    else:
-        eligible.sort(key=lambda p: (fee(p), p.min_initial_investment))
+        if not product_ok:
+            continue
 
-    return eligible
+        mapped_ids = product_id_to_portfolio_ids.get(product.id, [])
+        candidates = [portfolios_by_id[pid] for pid in mapped_ids if pid in portfolios_by_id]
+        eligible = [
+            p
+            for p in candidates
+            if is_eligible(p, bands, investment_horizon_years, emergency_fund_months, investment_goal)[0]
+        ]
+        if not eligible:
+            continue
+
+        allocations = recommend_portfolio_allocations(eligible, bands.governed_risk_band, investment_goal)
+        results.append((product, allocations))
+
+    return results
 
 
 # ---------------------------------------------------------------------
 # PRODUCT REASONING & TOP PICK
 #
 # Deterministic, rule-based explanations for why each product is worth
-# considering for this portfolio, plus a single "top pick" chosen by a
-# fixed priority order tailored to the client's own situation. Every
-# reason maps to a specific, inspectable rule — nothing here is
-# LLM-generated.
+# considering, plus a single "top pick" chosen by a fixed priority
+# order tailored to the client's own situation. Every reason maps to a
+# specific, inspectable rule — nothing here is LLM-generated.
 # ---------------------------------------------------------------------
-
-
 def build_product_reasons(
-    products: list[Product],
-    portfolio: Portfolio,
+    products_with_allocations: list[tuple[Product, list[tuple[Portfolio, float]]]],
     emergency_fund_months: float,
     tax_rate: int | None,
 ) -> dict[int, list[str]]:
-    reasons: dict[int, list[str]] = {p.id: [] for p in products}
-    if not products:
+    reasons: dict[int, list[str]] = {product.id: [] for product, _ in products_with_allocations}
+    if not products_with_allocations:
         return reasons
 
-    fee = lambda p: combined_fee_pct(p, portfolio)
+    fee = lambda pa: product_weighted_fee(pa[0], pa[1])
 
-    cheapest = min(products, key=fee)
-    reasons[cheapest.id].append("Lowest fee among your eligible options here")
+    cheapest = min(products_with_allocations, key=fee)
+    reasons[cheapest[0].id].append("Lowest fee among your eligible options")
 
     if tax_rate is not None and tax_rate >= 39:
-        for p in products:
-            if p.tax_wrapper in TAX_ADVANTAGED_WRAPPERS:
-                reasons[p.id].append(
+        for product, _ in products_with_allocations:
+            if product.tax_wrapper in TAX_ADVANTAGED_WRAPPERS:
+                reasons[product.id].append(
                     f"Tax-efficient wrapper — suits your {tax_rate}% estimated bracket"
                 )
 
     if emergency_fund_months < 3:
-        for p in products:
-            if p.min_term_years == 0:
-                reasons[p.id].append(
+        for product, _ in products_with_allocations:
+            if product.min_term_years == 0:
+                reasons[product.id].append(
                     "No lock-in — stays accessible given your limited emergency fund"
                 )
 
-    cheapest_entry = min(products, key=lambda p: p.min_initial_investment)
-    if cheapest_entry.id != cheapest.id:
-        reasons[cheapest_entry.id].append("Lowest minimum to get started")
+    cheapest_entry = min(products_with_allocations, key=lambda pa: pa[0].min_initial_investment)
+    if cheapest_entry[0].id != cheapest[0].id:
+        reasons[cheapest_entry[0].id].append("Lowest minimum to get started")
 
     return reasons
 
 
 def pick_top_product(
-    products: list[Product],
-    portfolio: Portfolio,
+    products_with_allocations: list[tuple[Product, list[tuple[Portfolio, float]]]],
     emergency_fund_months: float,
     tax_rate: int | None,
 ) -> tuple[Product | None, str]:
     """Priority order: (1) liquidity if emergency fund is thin,
     (2) tax efficiency if bracket is high, (3) lowest fee. Ties broken
     by lowest fee."""
-    if not products:
+    if not products_with_allocations:
         return None, ""
 
-    fee = lambda p: combined_fee_pct(p, portfolio)
+    fee = lambda pa: product_weighted_fee(pa[0], pa[1])
 
     if emergency_fund_months < 3:
-        liquid = [p for p in products if p.min_term_years == 0]
+        liquid = [pa for pa in products_with_allocations if pa[0].min_term_years == 0]
         if liquid:
             top = min(liquid, key=fee)
-            return top, "No lock-in — matters most given your limited emergency fund"
+            return top[0], "No lock-in — matters most given your limited emergency fund"
 
     if tax_rate is not None and tax_rate >= 39:
-        tax_efficient = [p for p in products if p.tax_wrapper in TAX_ADVANTAGED_WRAPPERS]
+        tax_efficient = [pa for pa in products_with_allocations if pa[0].tax_wrapper in TAX_ADVANTAGED_WRAPPERS]
         if tax_efficient:
             top = min(tax_efficient, key=fee)
-            return top, f"Tax-efficient wrapper suits your {tax_rate}% estimated bracket"
+            return top[0], f"Tax-efficient wrapper suits your {tax_rate}% estimated bracket"
 
-    top = min(products, key=fee)
-    return top, "Lowest fee among your eligible options"
+    top = min(products_with_allocations, key=fee)
+    return top[0], "Lowest fee among your eligible options"
