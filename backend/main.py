@@ -12,6 +12,7 @@ import auth
 import boto3
 import db
 import pdf_extract
+import product_specs
 import projections
 import tax_estimate
 from boto3.dynamodb.conditions import Key
@@ -28,7 +29,7 @@ from matching import (
     pick_top_product,
 )
 from pydantic import BaseModel, Field
-from scoring import ClientInput, compute_bands
+from scoring import BAND_EXPLANATIONS, BAND_LABELS, ClientInput, compute_bands
 
 app = FastAPI(title="Risk Profiling API")
 
@@ -147,6 +148,8 @@ class ProfileResult(BaseModel):
     horizon_band: int
     knowledge_band: int
     governed_risk_band: int
+    governed_risk_band_label: str
+    governed_risk_band_explanation: str
     goals_detail: str | None
     tax_bracket: str | None
     tax_bracket_estimated: bool
@@ -158,6 +161,7 @@ class ProfileResult(BaseModel):
 
 class ChatStartIn(BaseModel):
     known_context: dict = Field(default_factory=dict)
+    language: str = "en"
 
 
 class ChatStartOut(BaseModel):
@@ -189,6 +193,7 @@ class ChatTurnOut(BaseModel):
     risk_widget: dict | None = None
     profile_summary: dict | None = None
     nudge: dict | None = None
+    intake_progress: dict | None = None  # {"completed": int, "total": int} during intake; omitted post-results
 
 
 class TaxEstimateOut(BaseModel):
@@ -614,6 +619,8 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: str | No
         horizon_band=bands.horizon_band,
         knowledge_band=bands.knowledge_band,
         governed_risk_band=bands.governed_risk_band,
+        governed_risk_band_label=BAND_LABELS[bands.governed_risk_band],
+        governed_risk_band_explanation=BAND_EXPLANATIONS[bands.governed_risk_band],
         goals_detail=goals_detail,
         tax_bracket=tax_bracket,
         tax_bracket_estimated=tax_bracket_estimated,
@@ -689,6 +696,22 @@ def get_tax_estimate(monthly_income: float) -> TaxEstimateOut:
     return TaxEstimateOut(label=label, rate=rate)
 
 
+@app.get("/products/{product_id}/learn-more")
+def get_product_learn_more(product_id: int) -> dict:
+    """Curated highlights (about/key_features/faqs) from that product's
+    spec JSON, for the "Learn more" panel on a matched product's card.
+    404s cleanly if the product doesn't exist OR if it just doesn't
+    have a spec file yet — the frontend treats both the same way
+    (hide the "Learn more" affordance)."""
+    item = db.PRODUCTS.get_item(Key={"product_id": product_id}).get("Item")
+    if item is None or not item.get("key"):
+        raise HTTPException(status_code=404, detail="No additional info available for this product")
+    details = product_specs.learn_more(item["key"])
+    if details is None:
+        raise HTTPException(status_code=404, detail="No additional info available for this product")
+    return details
+
+
 _POLLY_MAX_CHARS = 3000  # keeps a single request bounded — hackathon-scale abuse guard, not a real quota system
 _polly_client = None
 
@@ -754,11 +777,14 @@ def start_chat(
     if user_id is not None:
         known_context = {**known_context, **_load_saved_known_context(user_id)}
 
+    language = payload.language if payload.language in ai_chat.LANGUAGE_NAMES else "en"
+
     session_id = db.next_id("session_id")
     session_item = {
         "session_id": session_id,
         "extracted_profile": json.dumps(known_context),
         "known_context": json.dumps(known_context),
+        "language": language,
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
     }
@@ -766,7 +792,7 @@ def start_chat(
         session_item["user_id"] = user_id
     db.CHAT_SESSIONS.put_item(Item=session_item)
 
-    opening = ai_chat.build_opening_message(known_context)
+    opening = ai_chat.build_opening_message(known_context, language=language)
     _put_message(session_id, "assistant", json.dumps(opening))
 
     return ChatStartOut(session_id=session_id, reply=opening)
@@ -795,7 +821,7 @@ def _load_history(session_id: int) -> list[dict]:
 
 
 def _handle_intake_turn(
-    session_id: int, extracted: dict, user_content, user_id: str | None = None, known_context: dict | None = None
+    session_id: int, extracted: dict, user_content, user_id: str | None = None, known_context: dict | None = None, language: str = "en"
 ) -> ChatTurnOut:
     history = _load_history(session_id)
 
@@ -810,7 +836,7 @@ def _handle_intake_turn(
             return {"status": "recorded"}
 
         if tool_name == "request_risk_ratings":
-            risk_widget_holder["data"] = ai_chat.build_risk_widget(extracted)
+            risk_widget_holder["data"] = ai_chat.build_risk_widget(extracted, language=language)
             return {"status": "widget_shown"}
 
         if tool_name == "show_profile_summary":
@@ -848,7 +874,7 @@ def _handle_intake_turn(
 
         return {"status": "unknown_tool"}
 
-    system_prompt = ai_chat.build_intake_system_prompt(known_context)
+    system_prompt = ai_chat.build_intake_system_prompt(known_context, language=language)
     reply, updated_history = ai_chat.run_turn(
         history, user_content, system_prompt, ai_chat.INTAKE_TOOLS, executor
     )
@@ -869,6 +895,7 @@ def _handle_intake_turn(
     )
 
     complete, missing = ai_chat.is_profile_complete(extracted)
+    completed_count, total_count = ai_chat.compute_intake_progress(extracted)
     return ChatTurnOut(
         reply=reply,
         extracted=extracted,
@@ -877,18 +904,43 @@ def _handle_intake_turn(
         finalized_result=result,
         risk_widget=risk_widget_holder["data"],
         profile_summary=summary_holder["data"],
+        intake_progress={"completed": completed_count, "total": total_count} if result is None else None,
     )
 
 
 SURPLUS_NUDGE_THRESHOLD = 200  # Rand — below this, not worth flagging as a meaningful surplus
 
 
-def _handle_post_results_turn(session_id: int, stored_result: dict, user_content) -> ChatTurnOut:
+def _load_product_blurbs(stored_result: dict) -> list[str]:
+    """Curated spec-file summaries for every product in this client's
+    matched results — feeds the post-results chat's system prompt so
+    it can answer detailed questions accurately. Products without a
+    spec file (or whose key lookup fails) are just skipped, not an
+    error — this is a nice-to-have enrichment, not required data."""
+    product_ids = {
+        prod["id"]
+        for pf in stored_result.get("matched_portfolios", [])
+        for prod in pf.get("matched_products", [])
+    }
+    blurbs = []
+    for product_id in product_ids:
+        item = db.PRODUCTS.get_item(Key={"product_id": product_id}).get("Item")
+        if item is None or not item.get("key"):
+            continue
+        blurb = product_specs.context_blurb(item["key"])
+        if blurb:
+            blurbs.append(blurb)
+    return blurbs
+
+
+def _handle_post_results_turn(session_id: int, stored_result: dict, user_content, language: str = "en") -> ChatTurnOut:
     history = _load_history(session_id)
 
     returns_by_portfolio = _load_returns()
     recalculated: list[RecalculatedProjectionOut] = []
     nudge_holder: dict = {"data": None}
+
+    product_blurbs = _load_product_blurbs(stored_result)
 
     def executor(tool_name: str, tool_input: dict) -> dict:
         if tool_name == "check_monthly_surplus":
@@ -945,7 +997,7 @@ def _handle_post_results_turn(session_id: int, stored_result: dict, user_content
             return {"status": "no_matching_products"}
         return {"projections": matches}
 
-    system_prompt = ai_chat.build_post_results_system_prompt(stored_result)
+    system_prompt = ai_chat.build_post_results_system_prompt(stored_result, product_blurbs=product_blurbs, language=language)
     reply, updated_history = ai_chat.run_turn(
         history, user_content, system_prompt, ai_chat.POST_RESULTS_TOOLS, executor
     )
@@ -975,15 +1027,16 @@ def send_chat_message(
     if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
     _check_session_access(item.get("user_id"), user_id)
+    language = item.get("language", "en")
 
     try:
         if item.get("finalized_result"):
-            result = _handle_post_results_turn(session_id, json.loads(item["finalized_result"]), payload.message)
+            result = _handle_post_results_turn(session_id, json.loads(item["finalized_result"]), payload.message, language=language)
         else:
             extracted = json.loads(item["extracted_profile"])
             known_context = json.loads(item["known_context"])
             result = _handle_intake_turn(
-                session_id, extracted, payload.message, user_id=user_id, known_context=known_context
+                session_id, extracted, payload.message, user_id=user_id, known_context=known_context, language=language
             )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1013,11 +1066,12 @@ def submit_risk_ratings(
     extracted = json.loads(item["extracted_profile"])
     extracted["tolerance_questionnaire"] = payload.ratings
     known_context = json.loads(item["known_context"])
+    language = item.get("language", "en")
     synthetic_message = f"[The client submitted their risk ratings via the widget: {payload.ratings}]"
 
     try:
         result = _handle_intake_turn(
-            session_id, extracted, synthetic_message, user_id=user_id, known_context=known_context
+            session_id, extracted, synthetic_message, user_id=user_id, known_context=known_context, language=language
         )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1060,8 +1114,9 @@ async def upload_statement(
     try:
         extracted = json.loads(item["extracted_profile"])
         known_context = json.loads(item["known_context"])
+        language = item.get("language", "en")
         result = _handle_intake_turn(
-            session_id, extracted, user_content, user_id=user_id, known_context=known_context
+            session_id, extracted, user_content, user_id=user_id, known_context=known_context, language=language
         )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))

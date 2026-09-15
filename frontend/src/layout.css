@@ -536,6 +536,7 @@
 }
 
 .risk-widget__row { display: flex; flex-direction: column; gap: 8px; }
+.risk-widget__instructions { font-size: 12.5px; color: var(--ink-muted); font-weight: 600; margin: 0 0 2px; }
 .risk-widget__question { font-size: 13.5px; color: var(--ink); line-height: 1.4; }
 .risk-widget__scale { display: flex; gap: 6px; }
 
@@ -817,6 +818,29 @@
   background: var(--accent-wash);
 }
 
+/* ---- intake progress bar ---- */
+
+.intake-progress {
+  height: 4px;
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+
+.intake-progress__bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 400ms var(--ease);
+}
+
+/* ---- results hero: plain-language band explanation ---- */
+
+.results-hero__explanation {
+  font-size: 13.5px;
+  color: var(--ink);
+  line-height: 1.45;
+  max-width: 52ch;
+}
+
 /* ---- investment application modal ---- */
 
 .application-modal {
@@ -915,4 +939,175 @@
   .application-form__grid, .application-form__amounts {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---- landing page ---- */
+
+.landing-shell {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 32px 24px;
+  overflow-y: auto;
+  min-height: 0;
+  background: radial-gradient(circle at 50% 0%, var(--accent-wash), var(--bg) 60%);
+}
+
+.landing-content {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 18px;
+}
+
+.landing-mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.landing-headline {
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.landing-subtext {
+  font-size: 14.5px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  max-width: 40ch;
+}
+
+.landing-search {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 6px 6px 20px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-search__input {
+  flex: 1;
+  border: none;
+  background: none;
+  font-size: 14.5px;
+  color: var(--ink);
+  outline: none;
+}
+
+.landing-search__submit {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.landing-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.landing-pill {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+.landing-pill:hover {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.landing-language {
+  position: relative;
+  margin-top: 10px;
+}
+
+.landing-language__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.landing-language__options {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  min-width: 180px;
+  z-index: 5;
+}
+
+.landing-language__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  color: var(--ink);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.landing-language__option:hover {
+  background: var(--surface-sunken);
+}
+
+.landing-language__option--active {
+  background: var(--accent-wash);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.landing-language__flag {
+  font-size: 15px;
 }

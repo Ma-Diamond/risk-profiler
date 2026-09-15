@@ -3,30 +3,9 @@ import RiskRatingWidget from "./RiskRatingWidget";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
-// Browser-native speech-to-text — Chrome/Edge support this well,
-// Safari partially, Firefox not at all. No API key, no backend
-// involvement; when unsupported, the mic button just doesn't render
-// rather than showing something broken.
 const SpeechRecognitionAPI =
   typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 
-/**
- * The chat is now the entire interaction — before results exist it
- * fills the screen collecting the client's full profile; after
- * results exist, the same component gets docked into a sidebar
- * (desktop) or a bottom sheet (mobile) by App.jsx, and switches to
- * answering "what if" questions instead.
- *
- * Exposes via ref:
- *  - sendProgrammaticMessage(text) — used by the summary popup's
- *    "Looks good" button.
- *  - resumeSession(sessionId, messages) — used when continuing a past
- *    profile from history: loads an existing session's reconstructed
- *    transcript instead of starting a new one.
- *  - startFresh() — used on login/logout to reset to a brand new guest
- *    (or newly-authenticated) session rather than leaving the UI
- *    pointed at a session the current identity may not own.
- */
 const ChatPanel = forwardRef(function ChatPanel(
   { sessionId, setSessionId, authToken, onFinalized, onRecalculated, onSummary, hasResults },
   ref
@@ -38,15 +17,11 @@ const ChatPanel = forwardRef(function ChatPanel(
   const [pendingRiskWidget, setPendingRiskWidget] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+  const [intakeProgress, setIntakeProgress] = useState(null); // { completed, total } | null
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
-  // React state updated inside recognition.onresult isn't visible to
-  // recognition.onend's closure (it captures the value from when
-  // toggleListening was called, not the latest) — this ref is the
-  // reliable way to know the final transcript at the moment listening
-  // actually stops, whether from silence or a manual click.
   const transcriptRef = useRef("");
 
   const authHeaders = () => (authToken ? { Authorization: `Bearer ${authToken}` } : {});
@@ -73,7 +48,6 @@ const ChatPanel = forwardRef(function ChatPanel(
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, pendingRiskWidget]);
 
-  // Stop any in-progress recognition or playback if the component goes away.
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop();
@@ -81,13 +55,13 @@ const ChatPanel = forwardRef(function ChatPanel(
     };
   }, []);
 
-  const sendRawRef = useRef(null); // set below, once sendRaw exists — onend needs to call it
+  const sendRawRef = useRef(null);
 
   const toggleListening = () => {
     if (!SpeechRecognitionAPI) return;
 
     if (isListening) {
-      recognitionRef.current?.stop(); // triggers onend below, which sends whatever was heard
+      recognitionRef.current?.stop();
       return;
     }
 
@@ -108,9 +82,6 @@ const ChatPanel = forwardRef(function ChatPanel(
 
     recognition.onerror = () => setIsListening(false);
 
-    // Fires both when speech naturally pauses (silence detection) AND
-    // when the mic button is clicked again to stop manually — either
-    // way, "done talking" means send it.
     recognition.onend = () => {
       setIsListening(false);
       const finalText = transcriptRef.current.trim();
@@ -129,13 +100,6 @@ const ChatPanel = forwardRef(function ChatPanel(
     }
   };
 
-  // Natural-sounding voice output via the backend's Polly-backed /tts
-  // endpoint — deliberately not the browser's built-in speechSynthesis,
-  // which sounds noticeably more robotic. Off by default (a full chat
-  // narrated aloud on every turn isn't always wanted); the speaker
-  // toggle in the composer turns it on. Failures are surfaced (not
-  // swallowed) so a broken Polly permission or a browser autoplay
-  // block is visible instead of just silently not speaking.
   const speakText = async (text) => {
     if (!voiceOutputEnabled || !text) return;
     try {
@@ -158,10 +122,6 @@ const ChatPanel = forwardRef(function ChatPanel(
       try {
         await audio.play();
       } catch (playErr) {
-        // Browsers can block programmatic audio playback outside a
-        // direct user gesture — surfacing this rather than failing
-        // silently, since otherwise "no voice" looks identical to a
-        // backend/permissions problem.
         setError(`Voice output couldn't play: ${playErr.message}`);
       }
     } catch (e) {
@@ -172,6 +132,7 @@ const ChatPanel = forwardRef(function ChatPanel(
   const handleTurnResponse = (data) => {
     setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
     speakText(data.reply);
+    setIntakeProgress(data.intake_progress || null);
     if (data.risk_widget) {
       setPendingRiskWidget(data.risk_widget);
     }
@@ -206,12 +167,13 @@ const ChatPanel = forwardRef(function ChatPanel(
     }
   };
 
-  const sendRaw = async (text) => {
+  const sendRaw = async (text, overrideSessionId) => {
+    const sid = overrideSessionId ?? sessionId;
     setMessages((m) => [...m, { role: "user", text }]);
     setSending(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
+      const res = await fetch(`${API_BASE}/chat/sessions/${sid}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ message: text }),
@@ -235,6 +197,7 @@ const ChatPanel = forwardRef(function ChatPanel(
       setMessages(newMessages);
       setPendingRiskWidget(null);
       setError(null);
+      setIntakeProgress(null); // a resumed session either already has results, or the next turn will re-report it
     },
 
     startFresh: () => {
@@ -242,6 +205,7 @@ const ChatPanel = forwardRef(function ChatPanel(
       setMessages([]);
       setPendingRiskWidget(null);
       setError(null);
+      setIntakeProgress(null);
       (async () => {
         try {
           const res = await fetch(`${API_BASE}/chat/sessions`, {
@@ -251,6 +215,38 @@ const ChatPanel = forwardRef(function ChatPanel(
           const data = await res.json();
           setSessionId(data.session_id);
           setMessages([{ role: "assistant", text: data.reply }]);
+        } catch {
+          setError("Couldn't start the conversation — check the API is running.");
+        }
+      })();
+    },
+
+    // Used by the landing page: starts a brand-new session in the
+    // chosen language, and — if the person typed something or tapped a
+    // suggestion pill instead of leaving it blank — immediately sends
+    // that as the first message. Passing the new session id straight
+    // into sendRaw (rather than relying on the sessionId state, which
+    // wouldn't have updated yet inside this same synchronous flow)
+    // avoids sending to a stale/missing session.
+    startWithMessage: (text, language) => {
+      setSessionId(null);
+      setMessages([]);
+      setPendingRiskWidget(null);
+      setError(null);
+      setIntakeProgress(null);
+      (async () => {
+        try {
+          const res = await fetch(`${API_BASE}/chat/sessions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify({ language: language || "en" }),
+          });
+          const data = await res.json();
+          setSessionId(data.session_id);
+          setMessages([{ role: "assistant", text: data.reply }]);
+          if (text && text.trim()) {
+            sendRaw(text.trim(), data.session_id);
+          }
         } catch {
           setError("Couldn't start the conversation — check the API is running.");
         }
@@ -316,13 +312,21 @@ const ChatPanel = forwardRef(function ChatPanel(
 
   const toggleVoiceOutput = () => {
     setVoiceOutputEnabled((v) => {
-      if (v) audioRef.current?.pause(); // turning off mid-speech stops it immediately
+      if (v) audioRef.current?.pause();
       return !v;
     });
   };
 
   return (
     <div className="chat-panel-wrap">
+      {!hasResults && intakeProgress && (
+        <div className="intake-progress" title={`${intakeProgress.completed} of ${intakeProgress.total} done`}>
+          <div
+            className="intake-progress__bar"
+            style={{ width: `${Math.round((intakeProgress.completed / intakeProgress.total) * 100)}%` }}
+          />
+        </div>
+      )}
       <div className="chat-panel__messages" ref={scrollRef}>
         {messages.map((m, i) =>
           m.role === "nudge" ? (

@@ -63,9 +63,14 @@ export default function ResultsPanel({ result, recalculatedProjections, accounts
           </div>
           <div className="results-hero__detail">
             <span className={`results-hero__band mono band-color-${result.governed_risk_band}`}>
-              Band {result.governed_risk_band} / 5
+              {result.governed_risk_band_label}
             </span>
+            <p className="results-hero__explanation">{result.governed_risk_band_explanation}</p>
             <div className="results-hero__breakdown">
+              <div>
+                <span className="field-label">Overall band</span>
+                <span className="mono">{result.governed_risk_band} / 5</span>
+              </div>
               <div>
                 <span className="field-label">Tolerance</span>
                 <span className="mono">{result.tolerance_band}</span>
@@ -89,9 +94,10 @@ export default function ResultsPanel({ result, recalculatedProjections, accounts
               )}
             </div>
             <p className="results-hero__note">
-              Governed by the lowest of tolerance, capacity, and horizon — the dot on the
-              ladder shows which one is constraining. Ask the chat "what if I invest more"
-              to see how the numbers below change.
+              Governed by the lowest of tolerance (your comfort with risk), capacity (what
+              you can financially afford to risk), and horizon (how long until you need this
+              money) — the dot on the ladder shows which one is constraining. Ask the chat
+              "what if I invest more" to see how the numbers below change.
             </p>
           </div>
         </div>

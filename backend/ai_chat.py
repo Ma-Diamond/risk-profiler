@@ -46,17 +46,163 @@ TOL_QUESTIONS_NOVICE = [
 ]
 
 TOL_QUESTIONS_EXPERT = [
-    "OK with a 20%+ drawdown for better long-run returns?",
-    "Prefer simplicity over complexity, even capping upside?",
-    "Would a downturn push you to de-risk immediately?",
-    "Genuinely long horizon — no near-term liquidity need?",
-    "Willing to lean into risk for the right opportunity?",
+    "I'm comfortable with a 20%+ drawdown for better long-run returns.",
+    "I prefer simplicity over complexity, even if it caps some upside.",
+    "A downturn would push me to de-risk immediately.",
+    "My horizon is genuinely long — no near-term liquidity need.",
+    "I'm willing to lean into risk for the right opportunity.",
 ]
 
 _GOAL_LABELS = {
     "retirement": "retirement",
     "house_deposit": "a house deposit",
     "general_growth": "general growth",
+}
+
+# ---------------------------------------------------------------------
+# Language support — the AI's own replies are made multilingual by
+# simply instructing it to converse in the chosen language (Claude is
+# genuinely fluent in all of these; there's no translation-string
+# system for dynamic AI output, it just speaks the language natively).
+# What DOES need real translated strings are the fixed pieces the
+# backend composes itself, deterministically, outside any model call:
+# the risk questionnaire text and the opening greeting templates.
+#
+# Confidence note: Portuguese and Swahili translations below are
+# reasonably solid. isiZulu and Igbo are a genuine best-effort first
+# draft, not verified by a native/professional speaker — given this is
+# financial content where precision matters, get these reviewed before
+# any real client-facing use.
+# ---------------------------------------------------------------------
+LANGUAGE_NAMES = {
+    "en": "English",
+    "zu": "isiZulu",
+    "sw": "Swahili",
+    "ig": "Igbo",
+    "pt": "Portuguese",
+}
+
+
+def _language_directive(language: str) -> str:
+    """Appended to a system prompt to make the model's own replies
+    multilingual — no per-string translation table needed for this
+    part, Claude just converses in the requested language directly."""
+    if language == "en" or language not in LANGUAGE_NAMES:
+        return ""
+    name = LANGUAGE_NAMES[language]
+    return (
+        f"\n\nLANGUAGE: conduct this entire conversation in {name}. Every reply you write "
+        f"to the client — greetings, questions, explanations, everything — must be in "
+        f"{name}. Tool calls themselves (field names, and structured values like numbers "
+        f"or the fixed goal codes) stay exactly as specified in their schema regardless of "
+        f"language; only the natural-language text you write to the client needs to be in "
+        f"{name}."
+    )
+
+
+# Non-English languages use one consistent, clear wording rather than
+# the separate novice/expert tiers English has — that tiering was a
+# phrasing nicety, not core functionality, and doubling five
+# translation sets for a wording variant wasn't worth the trade-off.
+TOL_QUESTIONS_TRANSLATED = {
+    "pt": [
+        "Eu me sentiria confortável vendo meu investimento cair 20% num ano ruim, se isso significasse um crescimento melhor no longo prazo.",
+        "Prefiro investir em coisas que entendo bem do que buscar algo complexo com maior potencial.",
+        "Se os mercados sofressem uma queda repentina, eu iria querer mover meu dinheiro para o caixa imediatamente.",
+        "Tenho confiança de que não vou precisar mexer neste dinheiro por vários anos.",
+        "Estou disposto(a) a assumir algum risco para aproveitar uma boa oportunidade financeira.",
+    ],
+    "sw": [
+        "Ningekuwa vizuri kuona uwekezaji wangu ukishuka kwa asilimia 20 katika mwaka mbaya, ikiwa hilo lingemaanisha ukuaji bora kwa muda mrefu.",
+        "Ningependelea kuwekeza katika vitu ninavyovielewa vizuri kuliko kufuatilia kitu chenye utata na uwezo mkubwa zaidi.",
+        "Kama masoko yangeporomoka ghafla, ningetaka kuhamisha pesa zangu kwenye fedha taslimu mara moja.",
+        "Nina uhakika sitohitaji kutumia pesa hizi kwa miaka kadhaa.",
+        "Niko tayari kuchukua hatari fulani ili kufuatilia fursa nzuri ya kifedha.",
+    ],
+    "zu": [
+        "Ngingakhululeka ukubona ukutshalwa kwemali kwami kwehla ngo-20% onyakeni omubi, uma lokho kusho ukukhula okungcono esikhathini eside.",
+        "Ngingathanda ukutshala emalini ezintweni engizizwa kahle kunokulandela into eyinkimbinkimbi enamathuba amakhulu.",
+        "Uma izimakethe zehla ngokuzumayo, ngingathanda ukususa imali yami ngiyifake emalini ekhona ngokushesha.",
+        "Nginesiqiniseko sokuthi angisoze ngayidinga le mali eminyakeni embalwa ezayo.",
+        "Ngizimisele ukuthatha ubungozi obuthile ukuze ngithole ithuba elihle lezimali.",
+    ],
+    "ig": [
+        "Aga m enwe obi udo ị̥hụ ka ego m tinyere na-adaba 20% n'afọ ọjọọ, ma ọ bụrụ na nke ahụ pụtara uto ka mma n'ogologo oge.",
+        "Ọ ga-akara m mma itinye ego n'ihe m ghọtara nke ọma karịa ịchụso ihe mgbagwoju anya nwere ohere ka ukwuu.",
+        "Ọ bụrụ na ahịa dara na mberede, m ga-achọ ibugharị ego m gaa n'ego nkịtị ozugbo.",
+        "Enwere m ntụkwasị obi na agaghị m achọ ego a ruo ọtụtụ afọ.",
+        "Adị m njịke re iwere ihe ize ndụ ụfọdụ iji chụso ohere ezigbo ego.",
+    ],
+}
+
+OPENING_MESSAGES = {
+    "en": {
+        "new": "Hi! I'm here to help figure out the right investment risk profile for you — it's just a conversation, no forms. Let's start simple: what's your name?",
+        "name_only": "Hi {name}! I'm here to help figure out the right investment risk profile for you — it's just a conversation, no forms. Let's start with your age — how old are you?",
+        "returning": "Welcome back, {name}! Last time you told us you're {recap}. Does that all still look right, or has anything changed?",
+    },
+    "pt": {
+        "new": "Olá! Estou aqui para ajudar a descobrir o perfil de risco de investimento certo para você — é só uma conversa, sem formulários. Vamos começar de forma simples: qual é o seu nome?",
+        "name_only": "Olá {name}! Estou aqui para ajudar a descobrir o perfil de risco de investimento certo para você — é só uma conversa, sem formulários. Vamos começar pela sua idade — quantos anos você tem?",
+        "returning": "Bem-vindo(a) de volta, {name}! Da última vez você nos disse que {recap}. Ainda está tudo certo, ou algo mudou?",
+    },
+    "sw": {
+        "new": "Habari! Niko hapa kukusaidia kupata wasifu sahihi wa hatari ya uwekezaji kwako — ni mazungumzo tu, hakuna fomu. Tuanze kwa urahisi: jina lako ni nani?",
+        "name_only": "Habari {name}! Niko hapa kukusaidia kupata wasifu sahihi wa hatari ya uwekezaji kwako — ni mazungumzo tu, hakuna fomu. Tuanze na umri wako — una miaka mingapi?",
+        "returning": "Karibu tena, {name}! Mara ya mwisho ulituambia kuwa {recap}. Je, hayo bado ni sahihi, au kuna kilichobadilika?",
+    },
+    "zu": {
+        "new": "Sawubona! Ngilapha ukukusiza uthole iphrofayili yobungozi bokutshalwa kwemali efanele kuwe — kuwukuxoxa nje, akukho amafomu. Ake siqale ngokulula: ubani igama lakho?",
+        "name_only": "Sawubona {name}! Ngilapha ukukusiza uthole iphrofayili yobungozi bokutshalwa kwemali efanele kuwe — kuwukuxoxa nje, akukho amafomu. Ake siqale ngeminyaka yakho — uneminyaka emingaki?",
+        "returning": "Siyakwamukela futhi, {name}! Ngesikhathi sokugcina wasitshela ukuthi {recap}. Konke lokho kusesekhona, noma kukhona okushintshile?",
+    },
+    "ig": {
+        "new": "Ndewo! Anọ m ebe a inyere gị aka ịchọpụta profaịlụ ihe ize ndụ itinye ego kwesịrị ekwesị maka gị — ọ bụ naanị mkparịta ụka, ọ nweghị fọm. Ka anyị malite nke dị mfe: gịnị bụ aha gị?",
+        "name_only": "Ndewo {name}! Anọ m ebe a inyere gị aka ịchọpụta profaịlụ ihe ize ndụ itinye ego kwesịrị ekwesị maka gị — ọ bụ naanị mkparịta ụka, ọ nweghị fọm. Ka anyị malite site na afọ gị — afọ ole ka ị dị?",
+        "returning": "Nnọọ ọzọ, {name}! Oge ikpeazụ ị gwara anyị na {recap}. Ihe niile ka dị mma, ka e nwere ihe gbanwere?",
+    },
+}
+
+# Per-language phrasing for the recap fragments ({age} years old, etc.)
+# — kept deliberately simple (no attempt at grammatical number
+# agreement across languages with very different pluralization rules)
+# so the composed sentence still reads naturally regardless of count.
+RECAP_FRAGMENTS = {
+    "en": {
+        "age": "{age} years old",
+        "dependents": "{n} dependents",
+        "income": "income of about R{income}/month",
+        "expenses": "expenses of about R{expenses}/month",
+        "knowledge": "investing experience rated {score}/5",
+    },
+    "pt": {
+        "age": "{age} anos de idade",
+        "dependents": "{n} dependentes",
+        "income": "renda de cerca de R{income}/mês",
+        "expenses": "despesas de cerca de R{expenses}/mês",
+        "knowledge": "experiência em investimentos avaliada em {score}/5",
+    },
+    "sw": {
+        "age": "umri wa miaka {age}",
+        "dependents": "wategemezi {n}",
+        "income": "kipato cha karibu R{income}/mwezi",
+        "expenses": "matumizi ya karibu R{expenses}/mwezi",
+        "knowledge": "uzoefu wa uwekezaji uliokadiriwa {score}/5",
+    },
+    "zu": {
+        "age": "iminyaka {age}",
+        "dependents": "abancike kuwe abangu-{n}",
+        "income": "imali engenayo engu-R{income}/ngenyanga",
+        "expenses": "izindleko ezingu-R{expenses}/ngenyanga",
+        "knowledge": "ulwazi lokutshala imali olulinganiselwa ku-{score}/5",
+    },
+    "ig": {
+        "age": "afọ {age}",
+        "dependents": "ndị dabere na gị {n}",
+        "income": "ego ọnụego dị ka R{income}/ọnwa",
+        "expenses": "mmefu ihe dị ka R{expenses}/ọnwa",
+        "knowledge": "ahụmahụ itinye ego akalarị {score}/5",
+    },
 }
 
 # ---------------------------------------------------------------------
@@ -91,6 +237,25 @@ def is_profile_complete(extracted: dict) -> tuple[bool, list[str]]:
         missing.append("tolerance_questionnaire (all 5 risk-attitude answers)")
 
     return (len(missing) == 0, missing)
+
+
+def compute_intake_progress(extracted: dict) -> tuple[int, int]:
+    """(completed, total) for a progress bar — the risk-attitude
+    questionnaire counts as one combined item (matching how
+    is_profile_complete treats it as a single unit), not 5 separate
+    ones, so progress moves in intuitive, evenly-sized steps."""
+    total = len(REQUIRED_FIELDS) + 1
+    completed = sum(1 for f in REQUIRED_FIELDS if extracted.get(f) not in (None, ""))
+
+    tol = extracted.get("tolerance_questionnaire")
+    if (
+        isinstance(tol, list)
+        and len(tol) == 5
+        and all(isinstance(x, (int, float)) and 1 <= x <= 5 for x in tol)
+    ):
+        completed += 1
+
+    return completed, total
 
 
 # ---------------------------------------------------------------------
@@ -289,9 +454,13 @@ STABLE_PROFILE_FIELDS = [
 ]
 
 
-def build_risk_widget(extracted: dict) -> dict:
+def build_risk_widget(extracted: dict, language: str = "en") -> dict:
     """Which question wording tier to show, based on the client's own
-    self-rated knowledge_score."""
+    self-rated knowledge_score — for English only; non-English
+    languages use one consistent translated wording regardless of
+    knowledge_score (see TOL_QUESTIONS_TRANSLATED's docstring note)."""
+    if language != "en" and language in TOL_QUESTIONS_TRANSLATED:
+        return {"tier": "novice", "questions": TOL_QUESTIONS_TRANSLATED[language]}
     tier = "expert" if (extracted.get("knowledge_score") or 0) >= 4 else "novice"
     questions = TOL_QUESTIONS_EXPERT if tier == "expert" else TOL_QUESTIONS_NOVICE
     return {"tier": tier, "questions": questions}
@@ -323,70 +492,61 @@ def build_profile_summary(extracted: dict) -> dict:
     }
 
 
-def _describe_stable_fields(known_context: dict) -> list[str]:
+def _describe_stable_fields(known_context: dict, language: str = "en") -> list[str]:
     """Natural-language fragments for whichever stable fields are known —
     used to build the personalized recap in the opening message."""
+    frag = RECAP_FRAGMENTS.get(language, RECAP_FRAGMENTS["en"])
     parts = []
     if "age" in known_context:
-        parts.append(f"{known_context['age']} years old")
+        parts.append(frag["age"].format(age=known_context["age"]))
     if "dependents" in known_context:
-        n = known_context["dependents"]
-        parts.append(f"{n} dependent{'s' if n != 1 else ''}")
+        parts.append(frag["dependents"].format(n=known_context["dependents"]))
     if "gross_monthly_income" in known_context:
-        parts.append(f"income of about R{known_context['gross_monthly_income']:,.0f}/month")
+        parts.append(frag["income"].format(income=f"{known_context['gross_monthly_income']:,.0f}"))
     if "monthly_expenses" in known_context:
-        parts.append(f"expenses of about R{known_context['monthly_expenses']:,.0f}/month")
+        parts.append(frag["expenses"].format(expenses=f"{known_context['monthly_expenses']:,.0f}"))
     if "knowledge_score" in known_context:
-        parts.append(f"investing experience rated {known_context['knowledge_score']}/5")
+        parts.append(frag["knowledge"].format(score=known_context["knowledge_score"]))
     return parts
 
 
-def build_opening_message(known_context: dict | None = None) -> str:
+def build_opening_message(known_context: dict | None = None, language: str = "en") -> str:
     known_context = known_context or {}
     full_name = known_context.get("full_name")
+    templates = OPENING_MESSAGES.get(language, OPENING_MESSAGES["en"])
 
     if not full_name:
-        return (
-            "Hi! I'm here to help figure out the right investment risk profile for you — "
-            "it's just a conversation, no forms. Let's start simple: what's your name?"
-        )
+        return templates["new"]
 
-    other_fields = _describe_stable_fields(known_context)
+    other_fields = _describe_stable_fields(known_context, language)
     if not other_fields:
         # Signed up with a name but no prior finalized profile yet — skip
         # asking for the name only, everything else is still fresh.
-        return (
-            f"Hi {full_name}! I'm here to help figure out the right investment risk "
-            "profile for you — it's just a conversation, no forms. Let's start with "
-            "your age — how old are you?"
-        )
+        return templates["name_only"].format(name=full_name)
 
     recap = ", ".join(other_fields)
-    return (
-        f"Welcome back, {full_name}! Last time you told us you're {recap}. "
-        "Does that all still look right, or has anything changed?"
-    )
+    return templates["returning"].format(name=full_name, recap=recap)
 
 
-def build_intake_system_prompt(known_context: dict | None = None) -> str:
+def build_intake_system_prompt(known_context: dict | None = None, language: str = "en") -> str:
     known_context = known_context or {}
     saved = {k: known_context[k] for k in STABLE_PROFILE_FIELDS if k in known_context}
-    if not saved:
-        return _INTAKE_SYSTEM_PROMPT_BASE
-
-    known_lines = "\n".join(f"- {k}: {v}" for k, v in saved.items())
-    prefix = (
-        "IMPORTANT — this client has an account with details saved from a previous "
-        "profile, already pre-filled and shown to them in your opening message:\n"
-        f"{known_lines}\n\n"
-        "Do NOT ask for these again. Your opening message already asked them to "
-        "confirm these are still accurate. If their reply confirms everything (e.g. "
-        "'yes', 'still correct', 'looks right', 'all good'), move straight on to "
-        "what's not yet known — do not repeat the confirmation question. If they say "
-        "something has changed, update just that field with record_client_info and "
-        "confirm the rest is still accurate before moving on.\n\n"
-    )
-    return prefix + _INTAKE_SYSTEM_PROMPT_BASE
+    prompt = _INTAKE_SYSTEM_PROMPT_BASE
+    if saved:
+        known_lines = "\n".join(f"- {k}: {v}" for k, v in saved.items())
+        prefix = (
+            "IMPORTANT — this client has an account with details saved from a previous "
+            "profile, already pre-filled and shown to them in your opening message:\n"
+            f"{known_lines}\n\n"
+            "Do NOT ask for these again. Your opening message already asked them to "
+            "confirm these are still accurate. If their reply confirms everything (e.g. "
+            "'yes', 'still correct', 'looks right', 'all good'), move straight on to "
+            "what's not yet known — do not repeat the confirmation question. If they say "
+            "something has changed, update just that field with record_client_info and "
+            "confirm the rest is still accurate before moving on.\n\n"
+        )
+        prompt = prefix + prompt
+    return prompt + _language_directive(language)
 
 
 # ---------------------------------------------------------------------
@@ -441,7 +601,7 @@ CHECK_SURPLUS_TOOL = {
 POST_RESULTS_TOOLS = [RECALCULATE_TOOL, CHECK_SURPLUS_TOOL]
 
 
-def build_post_results_system_prompt(finalized_result: dict) -> str:
+def build_post_results_system_prompt(finalized_result: dict, product_blurbs: list[str] | None = None, language: str = "en") -> str:
     lines = []
     for pf in finalized_result.get("matched_portfolios", []):
         for prod in pf.get("matched_products", []):
@@ -451,10 +611,20 @@ def build_post_results_system_prompt(finalized_result: dict) -> str:
             )
     products_block = "\n".join(lines) if lines else "(no matched products)"
 
+    details_block = ""
+    if product_blurbs:
+        details_block = (
+            "\n\nMORE DETAIL on these products, from their actual product specifications — use this "
+            "to answer specific questions accurately (fees, features, eligibility, etc.) rather than "
+            "guessing or relying on general knowledge about similar products:\n\n"
+            + "\n\n".join(product_blurbs)
+        )
+
     return f"""You are a friendly financial assistant helping a client understand the \
 investment risk matrix they've just been shown. Their matched portfolios/products are:
 
 {products_block}
+{details_block}
 
 FORMATTING: write in plain text only. No markdown — no **bold**, no bullet points with \
 - or *, no headers. This is a plain chat bubble that displays your text exactly as \
@@ -476,7 +646,7 @@ monthly investment, never estimate it yourself. If it finds a meaningful surplus
 explain it warmly and suggest putting it to work — mention their top pick or a \
 no-lock-in product if one exists among their matches, and note they can ask what that \
 extra amount would grow into. If there's nothing meaningful this time, say so plainly \
-rather than manufacturing urgency where there isn't any."""
+rather than manufacturing urgency where there isn't any.{_language_directive(language)}"""
 
 
 # ---------------------------------------------------------------------
