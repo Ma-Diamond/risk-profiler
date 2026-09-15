@@ -1,0 +1,95 @@
+{
+  "product_id": "liberty_offshore_investment_plan",
+  "product_name": "International Investment Account (Liberty Offshore Investment Plan)",
+  "provider": "Standard Bank International / STANLIB Fund Managers Jersey Limited",
+  "category": "Offshore Investment",
+  "source_documents": [
+    {
+      "file_name": "20251121-stb-sbi-one-pager-investment-account.pdf",
+      "version": null,
+      "last_modified": "2025-11-21"
+    }
+  ],
+  "about": "A flexible, open-ended international investment solution issued offshore by STANLIB Fund Managers Jersey Limited, allowing clients to invest directly in global markets through ETFs, collective investment schemes, and model portfolios, without being tied to the performance of local (South African) assets.",
+  "target_market": "South African tax residents (individuals and legal entities) seeking to diversify wealth into foreign currency, offshore products and protect against local market/currency risk.",
+  "key_features": [
+    {
+      "feature": "Direct Offshore Investment",
+      "description": "Issued offshore, allowing clients to invest directly in global markets through ETFs, collective investment schemes, and model portfolios.",
+      "source_section": "page 2, The product backbone"
+    },
+    {
+      "feature": "Flexibility and Accessibility",
+      "description": "Open-ended with no fixed term; clients can invest and withdraw funds at any time.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "Maximised Offshore Allowances",
+      "description": "Utilises the annual foreign capital allowance (up to R12 million per year with tax clearance/approval); amounts in excess of R12 million require SARB Financial Surveillance Department approval, or clients can invest offshore funds already held abroad.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "Collateral Flexibility",
+      "description": "Can be ceded as collateral to secure financing or meet other financial obligations while keeping investments intact.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "Tax Reporting Support",
+      "description": "Annual tax reporting is provided to help clients manage South African tax obligations, although clients remain responsible for their own tax arrangements.",
+      "source_section": "page 1"
+    }
+  ],
+  "eligibility": {
+    "who_can_invest": "Individual clients and legal entities who are South African tax residents.",
+    "trusts": "South African-linked trusts may only invest offshore via an asset swap arrangement, as they do not have their own offshore allowance.",
+    "joint_ownership": "Allowed, with up to 5 investors per Investment Account.",
+    "minors": "Not permitted to invest.",
+    "source_section": "page 2, Ownership options"
+  },
+  "benefits": {
+    "death_benefit": {
+      "sole_account_holder": "Investments held until certified death certificate and grant of probate (or equivalent) is received.",
+      "multiple_account_holders": "Account passes to surviving account holders upon receipt of the death certificate.",
+      "ceded_account": "If ceded as collateral, death benefit is paid to the cessionary.",
+      "legal_proof": "Legal proof of entitlement may be required; cost paid by the estate and deducted from the account before payment.",
+      "source_section": "page 2, Death benefit"
+    }
+  },
+  "fees": {
+    "admin_fee_structure": {
+      "currency": "USD",
+      "minimum_fee": "USD10 per client per month",
+      "sliding_scale": [
+        {"from": "$0", "to": "$249,999", "admin_fee_excl_vat": "0.50%"},
+        {"from": "$250,000", "to": "$499,999", "admin_fee_excl_vat": "0.40%"},
+        {"from": "$500,000", "to": "$749,999", "admin_fee_excl_vat": "0.30%"},
+        {"from": "$750,000", "to": "$999,999", "admin_fee_excl_vat": "0.20%"},
+        {"from": "$1,000,000", "to": "$4,999,999", "admin_fee_excl_vat": "0.15%"},
+        {"from": "$5,000,000", "to": "and upwards", "admin_fee_excl_vat": "0.10%"}
+      ],
+      "aggregation_note": "If a client has more than one investment account with Standard Bank International, all account values are combined when calculating the admin fee. Other qualifying investments elsewhere in the Standard Bank Group may also be considered.",
+      "source_section": "page 3, Fee structure"
+    },
+    "advice_fees": {
+      "initial_advice_fee_cap": "5%",
+      "ongoing_advice_fee_cap": "2%",
+      "note": "Channel dependent; agreed between client and Financial Adviser.",
+      "source_section": "page 3, Advice fees"
+    }
+  },
+  "taxation": {
+    "note": "Returns may be subject to various foreign and domestic taxes, including withholding tax, inheritance tax, income tax and capital gains tax. Clients remain responsible for managing their own tax obligations despite annual tax reporting support.",
+    "source_section": "page 2, Taxation benefits"
+  },
+  "regulatory_info": {
+    "regulator": "STANLIB Fund Managers Jersey Limited is regulated by the Jersey Financial Services Commission, a wholly owned subsidiary of STANLIB Limited (wholly owned by Liberty Holdings Limited, wholly owned by Standard Bank Group Limited).",
+    "fsp_license": "Standard Bank is a licensed FSP (FSP 11287) and registered credit provider (NCRCP15).",
+    "source_section": "page 3, Disclaimer"
+  },
+  "faqs": [],
+  "validation_notes": [
+    "Document is a marketing one-pager, not a full technical specification; some details (e.g. minimum initial investment, full T&Cs) are referenced as being in a separate 'Terms and Conditions and Business Rules' document not provided.",
+    "Mapped to product_key 'liberty_offshore_investment_plan' per user-provided naming convention."
+  ],
+  "version_history": []
+}

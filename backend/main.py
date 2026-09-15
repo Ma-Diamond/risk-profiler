@@ -12,6 +12,7 @@ import auth
 import boto3
 import db
 import pdf_extract
+import product_specs
 import projections
 import tax_estimate
 from boto3.dynamodb.conditions import Key
@@ -23,23 +24,17 @@ from matching import (
     Product,
     build_product_reasons,
     combined_fee_pct,
-    match_portfolios,
-    match_products,
+    match_products_with_allocations,
     pick_top_product,
+    product_weighted_fee,
 )
-from pydantic import BaseModel, Field
-from scoring import ClientInput, compute_bands
+from pydantic import BaseModel, Field, model_validator
+from scoring import BAND_EXPLANATIONS, BAND_LABELS, BandResult, ClientInput, compute_bands, horizon_band as compute_horizon_band
 
 app = FastAPI(title="Risk Profiling API")
 
 app.add_middleware(
     CORSMiddleware,
-    # Frontend (CloudFront) and backend (Elastic Beanstalk) are now on
-    # genuinely different domains, so this needs to actually allow
-    # cross-origin requests. Wildcard is safe here specifically because
-    # auth is a Bearer token in a header, not a cookie — there's no
-    # session to hijack via CSRF, which is the usual reason to lock
-    # this down tighter.
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,19 +45,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# ---------------------------------------------------------------------
-# Auth dependencies
-#
-# get_optional_user_id never raises — no header, a malformed header, or
-# an expired/invalid token all just mean "anonymous" (returns None).
-# Endpoints that must work for guests (starting a chat, sending a
-# message) use this. require_user_id builds on it and raises 401 when
-# there's no valid identity — used for /auth/me and /profiles.
-#
-# "user_id" is now the user's email (DynamoDB's Users table is keyed
-# by email) — kept the name for minimal churn on everything that reads
-# it, the type just changed from int to str.
-# ---------------------------------------------------------------------
 def get_optional_user_id(authorization: str | None = Header(default=None)) -> str | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -77,9 +59,6 @@ def require_user_id(user_id: str | None = Depends(get_optional_user_id)) -> str:
 
 
 def _check_session_access(session_owner_id: str | None, requester_user_id: str | None) -> None:
-    """A session with no owner (anonymous/guest) is accessible to anyone,
-    matching pre-auth behaviour. An owned session is only accessible to
-    its owner."""
     if session_owner_id is not None and session_owner_id != requester_user_id:
         raise HTTPException(status_code=403, detail="Not authorized to access this chat session")
 
@@ -110,24 +89,48 @@ class ProjectionOut(BaseModel):
     net_expected_return_pct: float
 
 
+class RecommendedPortfolioOut(BaseModel):
+    """One portfolio recommended within a product's split — a client
+    doesn't just pick a product, they hold a mix of portfolios inside
+    it. allocation_pct is our starting recommendation (weighted toward
+    the best-fit portfolio); the client can ask for a different split
+    in the chat."""
+
+    portfolio_id: int
+    portfolio_name: str
+    provider: str | None
+    risk_band: int
+    allocation_pct: float
+    split_initial_amount: float
+    split_monthly_amount: float
+    fee_pct: float
+    projection: ProjectionOut | None = None
+
+
 class ProductOut(BaseModel):
     id: int
-    portfolio_id: int
     name: str
     provider: str | None
     tax_wrapper: str
     min_initial_investment: float
     min_monthly_investment: float
-    total_fee_pct: float
     min_term_years: float
     description: str | None
     reasons: list[str] = []
     is_top_pick: bool = False
     top_pick_reason: str | None = None
-    projection: ProjectionOut | None = None
+    total_fee_pct: float  # weighted-average fee across the recommended portfolio split
+    total_expected_value: float | None = None
+    total_lower_value: float | None = None
+    total_upper_value: float | None = None
+    recommended_portfolios: list[RecommendedPortfolioOut] = []
 
 
-class PortfolioOut(BaseModel):
+class PortfolioCatalogOut(BaseModel):
+    """Plain catalog listing (GET /portfolios) — unrelated to a
+    client's own matched results, kept separate from ProductOut/
+    RecommendedPortfolioOut which are specific to a profile."""
+
     id: int
     name: str
     provider: str | None
@@ -137,7 +140,6 @@ class PortfolioOut(BaseModel):
     liquidity_days: int
     reg28_compliant: bool
     description: str | None
-    matched_products: list[ProductOut] = []
 
 
 class ProfileResult(BaseModel):
@@ -147,17 +149,44 @@ class ProfileResult(BaseModel):
     horizon_band: int
     knowledge_band: int
     governed_risk_band: int
+    governed_risk_band_label: str
+    governed_risk_band_explanation: str
     goals_detail: str | None
     tax_bracket: str | None
     tax_bracket_estimated: bool
     gross_monthly_income: float
     monthly_expenses: float
     monthly_contribution: float
-    matched_portfolios: list[PortfolioOut]
+    # Both added alongside the product-centric restructure — needed to
+    # re-run matching for a hypothetical "what if" question in chat
+    # without re-asking the client everything. Optional because a
+    # profile finalized before this existed won't have them; recalculate
+    # degrades gracefully (falls back to "can't re-match, sorry") rather
+    # than crashing for those older records.
+    investment_goal: str | None = None
+    emergency_fund_months: float | None = None
+    matched_products: list[ProductOut]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_band_framing(cls, data):
+        """Profiles finalized before governed_risk_band_label/
+        _explanation existed have stored JSON without them — without
+        this, loading one of those old records would hard-crash with a
+        validation error. Derives them from governed_risk_band, which
+        every record has always had."""
+        if isinstance(data, dict) and "governed_risk_band" in data:
+            band = data["governed_risk_band"]
+            if not data.get("governed_risk_band_label"):
+                data["governed_risk_band_label"] = BAND_LABELS.get(band, f"Band {band}")
+            if not data.get("governed_risk_band_explanation"):
+                data["governed_risk_band_explanation"] = BAND_EXPLANATIONS.get(band, "")
+        return data
 
 
 class ChatStartIn(BaseModel):
     known_context: dict = Field(default_factory=dict)
+    language: str = "en"
 
 
 class ChatStartOut(BaseModel):
@@ -169,26 +198,24 @@ class ChatMessageIn(BaseModel):
     message: str
 
 
-class RecalculatedProjectionOut(BaseModel):
-    product_id: int
-    portfolio_id: int
-    product_name: str
-    portfolio_name: str
-    expected_value: float
-    lower_value: float
-    upper_value: float
-
-
 class ChatTurnOut(BaseModel):
     reply: str
     extracted: dict = {}
     ready_to_finalize: bool = False
     missing_fields: list[str] = []
     finalized_result: ProfileResult | None = None
-    recalculated_projections: list[RecalculatedProjectionOut] = []
+    # The full, possibly-different recommended product set for a
+    # hypothetical "what if" question — a genuine re-match, not just
+    # updated numbers on the same fixed product list. None when this
+    # turn didn't involve a recalculation. Never persisted — this is a
+    # preview only, shown in the results view until the client starts
+    # a new conversation or explicitly asks to update their profile.
+    recalculated_products: list[ProductOut] | None = None
+    recalculated_note: str | None = None
     risk_widget: dict | None = None
     profile_summary: dict | None = None
     nudge: dict | None = None
+    intake_progress: dict | None = None
 
 
 class TaxEstimateOut(BaseModel):
@@ -216,7 +243,7 @@ class LoginIn(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: str  # the email — there's no separate numeric user id anymore
+    id: str
     email: str
     full_name: str | None
 
@@ -342,11 +369,6 @@ def _load_all_products() -> list[dict]:
 
 
 def _load_returns() -> dict[int, list[tuple[float, float, float, float]]]:
-    """portfolio_id -> its full return curve, sorted by horizon_years.
-    Each point is (horizon_years, expected, lower, upper) — see
-    projections.resolve_curve_point for how a specific horizon's rate
-    gets resolved from this. The catalog is small, so a full scan
-    (grouped client-side) is simpler than a query per portfolio."""
     items: list[dict] = []
     resp = db.PORTFOLIO_RETURNS.scan()
     items.extend(resp["Items"])
@@ -393,7 +415,93 @@ def _project(returns_by_portfolio, portfolio_id, fee_pct, initial_amount, monthl
     )
 
 
-_seed_status = {"state": "not_started"}  # not_started | running | done | failed
+def _build_product_id_to_portfolio_ids(portfolio_items_by_id: dict[int, dict]) -> dict[int, list[int]]:
+    """Inverts the existing portfolio -> product_ids denormalization
+    into product_id -> [portfolio_id, ...], which is what matching now
+    needs (product-first, not portfolio-first). No schema change
+    required — the source data (each portfolio's product_ids list)
+    already has everything needed."""
+    mapping: dict[int, list[int]] = {}
+    for portfolio_id, item in portfolio_items_by_id.items():
+        for product_id in item.get("product_ids", []):
+            mapping.setdefault(int(product_id), []).append(portfolio_id)
+    return mapping
+
+
+def _build_product_outputs(
+    products_with_allocations: list[tuple[Product, list[tuple[Portfolio, float]]]],
+    returns_by_portfolio: dict[int, list[tuple[float, float, float, float]]],
+    initial_amount: float,
+    monthly_amount: float,
+    horizon_years: float,
+    emergency_fund_months: float,
+    tax_rate: int | None,
+) -> list[ProductOut]:
+    """Shared by _finalize() and the chat's what-if recalculation —
+    turns (product, [(portfolio, allocation_pct), ...]) pairs into the
+    full ProductOut list: per-portfolio split amounts, projections, an
+    aggregated total projection per product, reasons, and top pick.
+    Sorted top-pick first, then cheapest effective fee."""
+    reasons_by_id = build_product_reasons(products_with_allocations, emergency_fund_months, tax_rate)
+    top_product, top_reason = pick_top_product(products_with_allocations, emergency_fund_months, tax_rate)
+
+    outputs: list[ProductOut] = []
+    for product, allocations in products_with_allocations:
+        recommended_portfolios: list[RecommendedPortfolioOut] = []
+        total_expected = total_lower = total_upper = 0.0
+        has_projection = False
+
+        for portfolio, alloc_pct in allocations:
+            split_initial = round(initial_amount * alloc_pct / 100, 2)
+            split_monthly = round(monthly_amount * alloc_pct / 100, 2)
+            fee = combined_fee_pct(product, portfolio)
+            projection = _project(returns_by_portfolio, portfolio.id, fee, split_initial, split_monthly, horizon_years)
+            if projection is not None:
+                total_expected += projection.expected_value
+                total_lower += projection.lower_value
+                total_upper += projection.upper_value
+                has_projection = True
+            recommended_portfolios.append(
+                RecommendedPortfolioOut(
+                    portfolio_id=portfolio.id,
+                    portfolio_name=portfolio.name,
+                    provider=portfolio.provider,
+                    risk_band=portfolio.risk_band,
+                    allocation_pct=alloc_pct,
+                    split_initial_amount=split_initial,
+                    split_monthly_amount=split_monthly,
+                    fee_pct=round(fee, 2),
+                    projection=projection,
+                )
+            )
+
+        is_top = top_product is not None and product.id == top_product.id
+        outputs.append(
+            ProductOut(
+                id=product.id,
+                name=product.name,
+                provider=product.provider,
+                tax_wrapper=product.tax_wrapper,
+                min_initial_investment=product.min_initial_investment,
+                min_monthly_investment=product.min_monthly_investment,
+                min_term_years=product.min_term_years,
+                description=product.description,
+                reasons=reasons_by_id.get(product.id, []),
+                is_top_pick=is_top,
+                top_pick_reason=top_reason if is_top else None,
+                total_fee_pct=round(product_weighted_fee(product, allocations), 2),
+                total_expected_value=round(total_expected, 2) if has_projection else None,
+                total_lower_value=round(total_lower, 2) if has_projection else None,
+                total_upper_value=round(total_upper, 2) if has_projection else None,
+                recommended_portfolios=recommended_portfolios,
+            )
+        )
+
+    outputs.sort(key=lambda p: (0 if p.is_top_pick else 1, p.total_fee_pct))
+    return outputs
+
+
+_seed_status = {"state": "not_started"}
 
 
 def _run_seeding() -> None:
@@ -402,10 +510,6 @@ def _run_seeding() -> None:
         db.seed_catalog()
         _seed_status["state"] = "done"
     except Exception as e:
-        # Seeding failing shouldn't take the whole app down — the API
-        # still starts and serves what it can (catalog just stays
-        # empty until this is retried). /admin/seed-status surfaces the
-        # failure directly instead of it being a silent, hard-to-find gap.
         _seed_status["state"] = "failed"
         _seed_status["error"] = str(e)
         print(f"Background seeding failed: {e}")
@@ -413,24 +517,12 @@ def _run_seeding() -> None:
 
 @app.on_event("startup")
 def startup() -> None:
-    # Table creation is fast (a handful of DDL calls) — stays
-    # synchronous so the app never starts serving before its tables
-    # exist. Seeding the real fund catalog is NOT fast (~8,700+
-    # DynamoDB writes, can take a couple of minutes on a cold start),
-    # so it runs in a background thread instead of blocking here —
-    # blocking was putting it at the mercy of gunicorn's worker
-    # timeout AND Elastic Beanstalk's health-check grace period,
-    # either of which could (and did) kill the process mid-seed.
     db.ensure_tables_exist()
     threading.Thread(target=_run_seeding, daemon=True).start()
 
 
 @app.get("/admin/seed-status")
 def seed_status() -> dict:
-    """Check seeding progress directly instead of digging through AWS
-    console item counts (which are only periodically updated anyway,
-    not real-time) or EB logs. Cheap Scan(Limit=1) checks per table —
-    fine to call occasionally, not meant for polling in a loop."""
     portfolios_have_items = bool(db.PORTFOLIOS.scan(Limit=1).get("Items"))
     products_have_items = bool(db.PRODUCTS.scan(Limit=1).get("Items"))
     returns_have_items = bool(db.PORTFOLIO_RETURNS.scan(Limit=1).get("Items"))
@@ -444,10 +536,7 @@ def seed_status() -> dict:
 
 
 # ---------------------------------------------------------------------
-# Core finalize logic — shared by the plain POST /clients/profile
-# endpoint and the chat's confirm_and_proceed tool. `extracted_extra`
-# carries goals/notes/tax_bracket overrides gathered outside the
-# ClientProfileIn payload itself (from the chat's extracted_profile).
+# Core finalize logic
 # ---------------------------------------------------------------------
 def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: str | None = None) -> ProfileResult:
     dependents = payload.dependents
@@ -529,83 +618,33 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: str | No
         )
 
     portfolio_items_by_id = {int(item["portfolio_id"]): item for item in _load_all_portfolios()}
-    portfolios = [_item_to_portfolio(item) for item in portfolio_items_by_id.values()]
-
-    matched = match_portfolios(
-        portfolios,
-        bands,
-        payload.investment_horizon_years,
-        payload.emergency_fund_months,
-        payload.investment_goal,
-    )
+    portfolios_by_id = {pid: _item_to_portfolio(item) for pid, item in portfolio_items_by_id.items()}
+    product_id_to_portfolio_ids = _build_product_id_to_portfolio_ids(portfolio_items_by_id)
 
     all_products = [_item_to_product(item) for item in _load_all_products()]
     returns_by_portfolio = _load_returns()
 
-    prioritize_tax_efficient = tax_rate is not None and tax_rate >= 39
-    portfolio_outputs: list[PortfolioOut] = []
+    products_with_allocations = match_products_with_allocations(
+        products=all_products,
+        product_id_to_portfolio_ids=product_id_to_portfolio_ids,
+        portfolios_by_id=portfolios_by_id,
+        bands=bands,
+        investment_horizon_years=payload.investment_horizon_years,
+        emergency_fund_months=payload.emergency_fund_months,
+        investment_goal=payload.investment_goal,
+        available_lump_sum=payload.available_lump_sum,
+        monthly_contribution=payload.monthly_contribution,
+    )
 
-    for portfolio in matched:
-        mapped_product_ids = set(int(pid) for pid in portfolio_items_by_id[portfolio.id].get("product_ids", []))
-        matched_products = match_products(
-            all_products,
-            portfolio,
-            mapped_product_ids,
-            payload.investment_goal,
-            payload.investment_horizon_years,
-            payload.available_lump_sum,
-            payload.monthly_contribution,
-            prioritize_tax_efficient=prioritize_tax_efficient,
-        )
-
-        reasons_by_id = build_product_reasons(
-            matched_products, portfolio, payload.emergency_fund_months, tax_rate
-        )
-        top_product, top_reason = pick_top_product(
-            matched_products, portfolio, payload.emergency_fund_months, tax_rate
-        )
-
-        portfolio_outputs.append(
-            PortfolioOut(
-                id=portfolio.id,
-                name=portfolio.name,
-                provider=portfolio.provider,
-                risk_band=portfolio.risk_band,
-                max_equity_pct=portfolio.max_equity_pct,
-                min_horizon_years=portfolio.min_horizon_years,
-                liquidity_days=portfolio.liquidity_days,
-                reg28_compliant=bool(portfolio.reg28_compliant),
-                description=portfolio.description,
-                matched_products=[
-                    ProductOut(
-                        id=prod.id,
-                        portfolio_id=portfolio.id,
-                        name=prod.name,
-                        provider=prod.provider,
-                        tax_wrapper=prod.tax_wrapper,
-                        min_initial_investment=prod.min_initial_investment,
-                        min_monthly_investment=prod.min_monthly_investment,
-                        total_fee_pct=round(combined_fee_pct(prod, portfolio), 2),
-                        min_term_years=prod.min_term_years,
-                        description=prod.description,
-                        reasons=reasons_by_id.get(prod.id, []),
-                        is_top_pick=(top_product is not None and prod.id == top_product.id),
-                        top_pick_reason=(
-                            top_reason if top_product is not None and prod.id == top_product.id else None
-                        ),
-                        projection=_project(
-                            returns_by_portfolio,
-                            portfolio.id,
-                            combined_fee_pct(prod, portfolio),
-                            payload.available_lump_sum,
-                            payload.monthly_contribution,
-                            payload.investment_horizon_years,
-                        ),
-                    )
-                    for prod in matched_products
-                ],
-            )
-        )
+    product_outputs = _build_product_outputs(
+        products_with_allocations,
+        returns_by_portfolio,
+        payload.available_lump_sum,
+        payload.monthly_contribution,
+        payload.investment_horizon_years,
+        payload.emergency_fund_months,
+        tax_rate,
+    )
 
     return ProfileResult(
         client_id=client_id,
@@ -614,22 +653,21 @@ def _finalize(payload: ClientProfileIn, extracted_extra: dict, user_id: str | No
         horizon_band=bands.horizon_band,
         knowledge_band=bands.knowledge_band,
         governed_risk_band=bands.governed_risk_band,
+        governed_risk_band_label=BAND_LABELS[bands.governed_risk_band],
+        governed_risk_band_explanation=BAND_EXPLANATIONS[bands.governed_risk_band],
         goals_detail=goals_detail,
         tax_bracket=tax_bracket,
         tax_bracket_estimated=tax_bracket_estimated,
         gross_monthly_income=gross_monthly_income,
         monthly_expenses=monthly_expenses,
         monthly_contribution=payload.monthly_contribution,
-        matched_portfolios=portfolio_outputs,
+        investment_goal=payload.investment_goal,
+        emergency_fund_months=payload.emergency_fund_months,
+        matched_products=product_outputs,
     )
 
 
 def _client_profile_from_extracted(extracted: dict, chat_session_id: int) -> ClientProfileIn:
-    """Builds a validated ClientProfileIn straight from the chat's
-    extracted_profile — used by confirm_and_proceed. Pydantic's own
-    validation (e.g. gross_monthly_income > 0) surfaces as a ValueError
-    the tool executor can hand back to the model as an actionable
-    error instead of crashing the request."""
     return ClientProfileIn(
         full_name=extracted["full_name"],
         age=int(extracted["age"]),
@@ -651,9 +689,6 @@ def _client_profile_from_extracted(extracted: dict, chat_session_id: int) -> Cli
 def submit_profile(
     payload: ClientProfileIn, user_id: str | None = Depends(get_optional_user_id)
 ) -> ProfileResult:
-    """Direct entry point (not used by the chat flow, kept for testing
-    / potential non-chat integrations). Pulls goals/tax_bracket
-    overrides from the chat session if one is referenced."""
     extracted_extra: dict = {}
     if payload.chat_session_id is not None:
         item = db.CHAT_SESSIONS.get_item(Key={"session_id": payload.chat_session_id}).get("Item")
@@ -664,11 +699,11 @@ def submit_profile(
     return _finalize(payload, extracted_extra, user_id=user_id)
 
 
-@app.get("/portfolios", response_model=list[PortfolioOut])
-def list_portfolios() -> list[PortfolioOut]:
+@app.get("/portfolios", response_model=list[PortfolioCatalogOut])
+def list_portfolios() -> list[PortfolioCatalogOut]:
     items = sorted(_load_all_portfolios(), key=lambda i: int(i["risk_band"]))
     return [
-        PortfolioOut(
+        PortfolioCatalogOut(
             id=int(i["portfolio_id"]),
             name=i["name"],
             provider=i["provider"],
@@ -689,7 +724,18 @@ def get_tax_estimate(monthly_income: float) -> TaxEstimateOut:
     return TaxEstimateOut(label=label, rate=rate)
 
 
-_POLLY_MAX_CHARS = 3000  # keeps a single request bounded — hackathon-scale abuse guard, not a real quota system
+@app.get("/products/{product_id}/learn-more")
+def get_product_learn_more(product_id: int) -> dict:
+    item = db.PRODUCTS.get_item(Key={"product_id": product_id}).get("Item")
+    if item is None or not item.get("key"):
+        raise HTTPException(status_code=404, detail="No additional info available for this product")
+    details = product_specs.learn_more(item["key"])
+    if details is None:
+        raise HTTPException(status_code=404, detail="No additional info available for this product")
+    return details
+
+
+_POLLY_MAX_CHARS = 3000
 _polly_client = None
 
 
@@ -703,13 +749,6 @@ def _get_polly():
 
 @app.post("/tts")
 def synthesize_speech(payload: TTSIn) -> Response:
-    """Text -> spoken audio via Amazon Polly's Neural engine — used for
-    the optional "read replies aloud" toggle. Deliberately not tied to
-    a specific chat session or auth: it's a stateless text-to-audio
-    utility, no different in sensitivity from any other public route
-    here. Neural voices sound meaningfully more natural than the
-    browser's built-in speechSynthesis, which is the whole point of
-    using Polly instead."""
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=422, detail="text must not be empty")
@@ -729,13 +768,7 @@ def synthesize_speech(payload: TTSIn) -> Response:
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
-# ---------------------------------------------------------------------
-# Chat — single endpoint, two phases
-# ---------------------------------------------------------------------
 def _load_saved_known_context(user_id: str) -> dict:
-    """A returning user's stable fields from their last finalized profile
-    (or just their signup name, if they haven't finalized one yet) —
-    pre-filled into a new session so those aren't asked from scratch."""
     item = db.USERS.get_item(Key={"email": user_id}).get("Item")
     if item is None:
         return {}
@@ -754,11 +787,14 @@ def start_chat(
     if user_id is not None:
         known_context = {**known_context, **_load_saved_known_context(user_id)}
 
+    language = payload.language if payload.language in ai_chat.LANGUAGE_NAMES else "en"
+
     session_id = db.next_id("session_id")
     session_item = {
         "session_id": session_id,
         "extracted_profile": json.dumps(known_context),
         "known_context": json.dumps(known_context),
+        "language": language,
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
     }
@@ -766,16 +802,13 @@ def start_chat(
         session_item["user_id"] = user_id
     db.CHAT_SESSIONS.put_item(Item=session_item)
 
-    opening = ai_chat.build_opening_message(known_context)
+    opening = ai_chat.build_opening_message(known_context, language=language)
     _put_message(session_id, "assistant", json.dumps(opening))
 
     return ChatStartOut(session_id=session_id, reply=opening)
 
 
 def _put_message(session_id: int, role: str, content_json: str) -> None:
-    """Sort key is timestamp + a short random suffix — gives ordered
-    retrieval via Query (no client-side sort needed) and avoids
-    same-timestamp collisions."""
     sort_key = f"{_now_iso()}#{uuid.uuid4().hex[:8]}"
     db.CHAT_MESSAGES.put_item(
         Item={"session_id": session_id, "created_at": sort_key, "role": role, "content": content_json}
@@ -795,7 +828,7 @@ def _load_history(session_id: int) -> list[dict]:
 
 
 def _handle_intake_turn(
-    session_id: int, extracted: dict, user_content, user_id: str | None = None, known_context: dict | None = None
+    session_id: int, extracted: dict, user_content, user_id: str | None = None, known_context: dict | None = None, language: str = "en"
 ) -> ChatTurnOut:
     history = _load_history(session_id)
 
@@ -810,7 +843,7 @@ def _handle_intake_turn(
             return {"status": "recorded"}
 
         if tool_name == "request_risk_ratings":
-            risk_widget_holder["data"] = ai_chat.build_risk_widget(extracted)
+            risk_widget_holder["data"] = ai_chat.build_risk_widget(extracted, language=language)
             return {"status": "widget_shown"}
 
         if tool_name == "show_profile_summary":
@@ -841,14 +874,14 @@ def _handle_intake_turn(
             try:
                 profile_in = _client_profile_from_extracted(extracted, session_id)
                 result = _finalize(profile_in, extracted, user_id=user_id)
-            except Exception as e:  # validation error, bad value, etc.
+            except Exception as e:
                 return {"status": "error", "detail": str(e)}
             finalized_holder["result"] = result
             return {"status": "confirmed", "governed_risk_band": result.governed_risk_band}
 
         return {"status": "unknown_tool"}
 
-    system_prompt = ai_chat.build_intake_system_prompt(known_context)
+    system_prompt = ai_chat.build_intake_system_prompt(known_context, language=language)
     reply, updated_history = ai_chat.run_turn(
         history, user_content, system_prompt, ai_chat.INTAKE_TOOLS, executor
     )
@@ -869,6 +902,7 @@ def _handle_intake_turn(
     )
 
     complete, missing = ai_chat.is_profile_complete(extracted)
+    completed_count, total_count = ai_chat.compute_intake_progress(extracted)
     return ChatTurnOut(
         reply=reply,
         extracted=extracted,
@@ -877,18 +911,98 @@ def _handle_intake_turn(
         finalized_result=result,
         risk_widget=risk_widget_holder["data"],
         profile_summary=summary_holder["data"],
+        intake_progress={"completed": completed_count, "total": total_count} if result is None else None,
     )
 
 
-SURPLUS_NUDGE_THRESHOLD = 200  # Rand — below this, not worth flagging as a meaningful surplus
+SURPLUS_NUDGE_THRESHOLD = 200
 
 
-def _handle_post_results_turn(session_id: int, stored_result: dict, user_content) -> ChatTurnOut:
+def _load_product_blurbs(stored_result: dict) -> list[str]:
+    product_ids = {prod["id"] for prod in stored_result.get("matched_products", [])}
+    blurbs = []
+    for product_id in product_ids:
+        item = db.PRODUCTS.get_item(Key={"product_id": product_id}).get("Item")
+        if item is None or not item.get("key"):
+            continue
+        blurb = product_specs.context_blurb(item["key"])
+        if blurb:
+            blurbs.append(blurb)
+    return blurbs
+
+
+def _rematch_for_hypothetical(
+    stored_result: dict, initial_amount: float, monthly_amount: float, horizon_years: float
+) -> list[ProductOut] | None:
+    """Genuinely re-runs product matching for a hypothetical "what if"
+    question — a different lump sum, contribution, or horizon can
+    change which products are even eligible (e.g. a bigger lump sum
+    might newly qualify for a product with a high minimum), not just
+    the projected numbers on the products already shown.
+
+    Uses the client's STORED bands/goal/emergency-fund (unchanged —
+    this is a preview, not a redo of the whole intake). If horizon
+    changed, horizon_band (and therefore governed_risk_band) is
+    re-derived accordingly, same as a real re-profiling would.
+
+    Returns None if the stored profile predates investment_goal/
+    emergency_fund_months being recorded — an older profile can't be
+    re-matched without them, so this degrades gracefully rather than
+    crashing; the caller falls back to explaining that a fresh profile
+    is needed for this feature.
+    """
+    investment_goal = stored_result.get("investment_goal")
+    emergency_fund_months = stored_result.get("emergency_fund_months")
+    if investment_goal is None or emergency_fund_months is None:
+        return None
+
+    new_horizon_band = compute_horizon_band(horizon_years)
+    bands = BandResult(
+        tolerance_band=stored_result["tolerance_band"],
+        capacity_band=stored_result["capacity_band"],
+        horizon_band=new_horizon_band,
+        governed_risk_band=min(stored_result["tolerance_band"], stored_result["capacity_band"], new_horizon_band),
+        knowledge_band=stored_result["knowledge_band"],
+    )
+
+    portfolio_items_by_id = {int(item["portfolio_id"]): item for item in _load_all_portfolios()}
+    portfolios_by_id = {pid: _item_to_portfolio(item) for pid, item in portfolio_items_by_id.items()}
+    product_id_to_portfolio_ids = _build_product_id_to_portfolio_ids(portfolio_items_by_id)
+
+    all_products = [_item_to_product(item) for item in _load_all_products()]
+    returns_by_portfolio = _load_returns()
+
+    products_with_allocations = match_products_with_allocations(
+        products=all_products,
+        product_id_to_portfolio_ids=product_id_to_portfolio_ids,
+        portfolios_by_id=portfolios_by_id,
+        bands=bands,
+        investment_horizon_years=horizon_years,
+        emergency_fund_months=emergency_fund_months,
+        investment_goal=investment_goal,
+        available_lump_sum=initial_amount,
+        monthly_contribution=monthly_amount,
+    )
+
+    tax_rate = _parse_tax_rate(stored_result.get("tax_bracket"))
+    return _build_product_outputs(
+        products_with_allocations,
+        returns_by_portfolio,
+        initial_amount,
+        monthly_amount,
+        horizon_years,
+        emergency_fund_months,
+        tax_rate,
+    )
+
+
+def _handle_post_results_turn(session_id: int, stored_result: dict, user_content, language: str = "en") -> ChatTurnOut:
     history = _load_history(session_id)
 
-    returns_by_portfolio = _load_returns()
-    recalculated: list[RecalculatedProjectionOut] = []
+    recalculated_holder: dict = {"products": None, "note": None}
     nudge_holder: dict = {"data": None}
+
+    product_blurbs = _load_product_blurbs(stored_result)
 
     def executor(tool_name: str, tool_input: dict) -> dict:
         if tool_name == "check_monthly_surplus":
@@ -906,46 +1020,46 @@ def _handle_post_results_turn(session_id: int, stored_result: dict, user_content
         if tool_name != "recalculate_investment_projection":
             return {"status": "unknown_tool"}
 
-        name_filter = (tool_input.get("product_name") or "").lower().strip()
-        matches = []
-        for pf in stored_result.get("matched_portfolios", []):
-            for prod in pf.get("matched_products", []):
-                if name_filter and name_filter not in prod["name"].lower():
-                    continue
-                projection = _project(
-                    returns_by_portfolio,
-                    prod["portfolio_id"],
-                    prod["total_fee_pct"],
-                    tool_input["initial_amount"],
-                    tool_input["monthly_amount"],
-                    tool_input["horizon_years"],
-                )
-                if projection is None:
-                    continue
-                entry = {
-                    "portfolio_name": pf["name"],
-                    "product_name": prod["name"],
-                    "expected_value": projection.expected_value,
-                    "lower_value": projection.lower_value,
-                    "upper_value": projection.upper_value,
-                }
-                matches.append(entry)
-                recalculated.append(
-                    RecalculatedProjectionOut(
-                        product_id=prod["id"],
-                        portfolio_id=prod["portfolio_id"],
-                        product_name=prod["name"],
-                        portfolio_name=pf["name"],
-                        expected_value=projection.expected_value,
-                        lower_value=projection.lower_value,
-                        upper_value=projection.upper_value,
-                    )
-                )
-        if not matches:
-            return {"status": "no_matching_products"}
-        return {"projections": matches}
+        new_products = _rematch_for_hypothetical(
+            stored_result,
+            tool_input["initial_amount"],
+            tool_input["monthly_amount"],
+            tool_input["horizon_years"],
+        )
+        if new_products is None:
+            return {
+                "status": "unavailable",
+                "detail": "This profile predates re-matching support — the client would need to redo their profile for this.",
+            }
 
-    system_prompt = ai_chat.build_post_results_system_prompt(stored_result)
+        recalculated_holder["products"] = new_products
+        recalculated_holder["note"] = (
+            "This is a preview only — nothing has been saved. The client's actual saved profile is unchanged "
+            "unless they explicitly ask you to update it."
+        )
+
+        original_names = {p["name"] for p in stored_result.get("matched_products", [])}
+        new_names = {p.name for p in new_products}
+        return {
+            "status": "recalculated",
+            "product_count": len(new_products),
+            "newly_eligible_products": sorted(new_names - original_names),
+            "no_longer_eligible_products": sorted(original_names - new_names),
+            "top_products": [
+                {
+                    "name": p.name,
+                    "total_fee_pct": p.total_fee_pct,
+                    "total_expected_value": p.total_expected_value,
+                    "portfolios": [
+                        {"name": rp.portfolio_name, "allocation_pct": rp.allocation_pct}
+                        for rp in p.recommended_portfolios
+                    ],
+                }
+                for p in new_products[:5]
+            ],
+        }
+
+    system_prompt = ai_chat.build_post_results_system_prompt(stored_result, product_blurbs=product_blurbs, language=language)
     reply, updated_history = ai_chat.run_turn(
         history, user_content, system_prompt, ai_chat.POST_RESULTS_TOOLS, executor
     )
@@ -962,7 +1076,8 @@ def _handle_post_results_turn(session_id: int, stored_result: dict, user_content
     return ChatTurnOut(
         reply=reply,
         ready_to_finalize=True,
-        recalculated_projections=recalculated,
+        recalculated_products=recalculated_holder["products"],
+        recalculated_note=recalculated_holder["note"],
         nudge=nudge_holder["data"],
     )
 
@@ -975,15 +1090,16 @@ def send_chat_message(
     if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
     _check_session_access(item.get("user_id"), user_id)
+    language = item.get("language", "en")
 
     try:
         if item.get("finalized_result"):
-            result = _handle_post_results_turn(session_id, json.loads(item["finalized_result"]), payload.message)
+            result = _handle_post_results_turn(session_id, json.loads(item["finalized_result"]), payload.message, language=language)
         else:
             extracted = json.loads(item["extracted_profile"])
             known_context = json.loads(item["known_context"])
             result = _handle_intake_turn(
-                session_id, extracted, payload.message, user_id=user_id, known_context=known_context
+                session_id, extracted, payload.message, user_id=user_id, known_context=known_context, language=language
             )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -995,11 +1111,6 @@ def send_chat_message(
 def submit_risk_ratings(
     session_id: int, payload: RiskRatingsIn, user_id: str | None = Depends(get_optional_user_id)
 ) -> ChatTurnOut:
-    """The risk-ratings widget's submit button hits this directly rather
-    than going through the normal chat message endpoint — the 5 numbers
-    are recorded deterministically (no NLU ambiguity), then the model
-    gets a synthetic turn so it can continue the conversation naturally
-    (recap, ask what's still missing, etc.)."""
     if len(payload.ratings) != 5 or not all(1 <= r <= 5 for r in payload.ratings):
         raise HTTPException(status_code=422, detail="ratings must be exactly 5 integers, each 1-5")
 
@@ -1013,11 +1124,12 @@ def submit_risk_ratings(
     extracted = json.loads(item["extracted_profile"])
     extracted["tolerance_questionnaire"] = payload.ratings
     known_context = json.loads(item["known_context"])
+    language = item.get("language", "en")
     synthetic_message = f"[The client submitted their risk ratings via the widget: {payload.ratings}]"
 
     try:
         result = _handle_intake_turn(
-            session_id, extracted, synthetic_message, user_id=user_id, known_context=known_context
+            session_id, extracted, synthetic_message, user_id=user_id, known_context=known_context, language=language
         )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1029,8 +1141,6 @@ def submit_risk_ratings(
 async def upload_statement(
     session_id: int, file: UploadFile = File(...), user_id: str | None = Depends(get_optional_user_id)
 ) -> ChatTurnOut:
-    """Intake-only — used to help estimate income/expenses before a
-    profile is finalized."""
     item = db.CHAT_SESSIONS.get_item(Key={"session_id": session_id}).get("Item")
     if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
@@ -1060,8 +1170,9 @@ async def upload_statement(
     try:
         extracted = json.loads(item["extracted_profile"])
         known_context = json.loads(item["known_context"])
+        language = item.get("language", "en")
         result = _handle_intake_turn(
-            session_id, extracted, user_content, user_id=user_id, known_context=known_context
+            session_id, extracted, user_content, user_id=user_id, known_context=known_context, language=language
         )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1073,11 +1184,6 @@ async def upload_statement(
 def get_chat_history(
     session_id: int, user_id: str | None = Depends(get_optional_user_id)
 ) -> list[ChatMessageOut]:
-    """Reconstructs a clean, human-readable transcript for reopening a
-    session — the raw stored rows include tool_use/tool_result plumbing
-    that was never meant to be displayed. Used when continuing a past
-    profile: the chat area needs something to show besides a blank
-    screen even though the underlying session already has full history."""
     item = db.CHAT_SESSIONS.get_item(Key={"session_id": session_id}).get("Item")
     if item is None:
         raise HTTPException(status_code=404, detail="chat session not found")
@@ -1103,7 +1209,7 @@ def get_chat_history(
                 display.append(ChatMessageOut(role="assistant", text=text))
         elif role == "user":
             if all(b.get("type") == "tool_result" for b in content):
-                continue  # internal tool plumbing, never shown
+                continue
             text_blocks = [b.get("text", "") for b in content if b.get("type") == "text"]
             combined = " ".join(text_blocks).strip()
             if combined.startswith("I've uploaded a bank statement"):
@@ -1114,9 +1220,6 @@ def get_chat_history(
     return display
 
 
-# ---------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------
 @app.post("/auth/register", response_model=AuthOut)
 def register(payload: RegisterIn) -> AuthOut:
     existing = db.USERS.get_item(Key={"email": payload.email}).get("Item")
@@ -1145,8 +1248,6 @@ def login(payload: LoginIn) -> AuthOut:
     item = db.USERS.get_item(Key={"email": payload.email}).get("Item")
 
     if item is None or not auth.verify_password(payload.password, item["password_hash"]):
-        # Same message for "no such user" and "wrong password" — never
-        # reveal which one it was, that's an account-enumeration leak.
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
     token = auth.create_token(item["email"])
@@ -1164,15 +1265,12 @@ def get_me(user_id: str = Depends(require_user_id)) -> UserOut:
     return UserOut(id=item["email"], email=item["email"], full_name=item.get("full_name"))
 
 
-# ---------------------------------------------------------------------
-# Profile history
-# ---------------------------------------------------------------------
 @app.get("/profiles", response_model=list[ProfileSummaryOut])
 def list_profiles(user_id: str = Depends(require_user_id)) -> list[ProfileSummaryOut]:
     resp = db.CLIENTS.query(
         IndexName="by-user",
         KeyConditionExpression=Key("user_id").eq(user_id),
-        ScanIndexForward=False,  # newest first
+        ScanIndexForward=False,
     )
     items = resp["Items"]
     while "LastEvaluatedKey" in resp:
@@ -1210,7 +1308,17 @@ def get_profile(client_id: int, user_id: str = Depends(require_user_id)) -> Prof
     if session_item is None or not session_item.get("finalized_result"):
         raise HTTPException(status_code=404, detail="stored result not found for this profile")
 
-    profile_result = ProfileResult.model_validate_json(session_item["finalized_result"])
+    try:
+        profile_result = ProfileResult.model_validate_json(session_item["finalized_result"])
+    except Exception:
+        # This profile predates the product-centric restructure (a
+        # structural reshape, not just missing fields) — nothing to
+        # meaningfully backfill from, so surface a clear, honest error
+        # rather than a raw 500 or silently-wrong data.
+        raise HTTPException(
+            status_code=409,
+            detail="This profile was created before a product-matching update and can't be reopened — please start a new risk profile.",
+        )
     accounts = _load_accounts_for_client(client_id)
 
     return ProfileDetailOut(chat_session_id=chat_session_id, profile_result=profile_result, accounts=accounts)
@@ -1245,13 +1353,6 @@ def _load_accounts_for_client(client_id: int) -> list[AccountOut]:
     return accounts
 
 
-# ---------------------------------------------------------------------
-# Investment accounts — the "Invest Now" flow. A hackathon-realistic
-# simulation (form -> disclaimer -> account "opened"), not a real
-# policy administration integration. Opening an account requires
-# login, unlike the guest-friendly chat/profiling flow, since an
-# account is inherently tied to a persistent identity.
-# ---------------------------------------------------------------------
 @app.post("/accounts", response_model=AccountOut)
 def open_account(payload: AccountApplicationIn, user_id: str = Depends(require_user_id)) -> AccountOut:
     client_item = db.CLIENTS.get_item(Key={"client_id": payload.client_id}).get("Item")
@@ -1268,9 +1369,6 @@ def open_account(payload: AccountApplicationIn, user_id: str = Depends(require_u
         raise HTTPException(status_code=404, detail="portfolio not found")
 
     tax_wrapper = product_item["tax_wrapper"]
-    # Server-side, not just a frontend form requirement — a retirement
-    # annuity legally needs a nominated beneficiary, so we don't trust
-    # the client-side form alone to enforce this.
     if tax_wrapper == "retirement_annuity" and payload.beneficiary is None:
         raise HTTPException(
             status_code=422,
@@ -1310,9 +1408,6 @@ def open_account(payload: AccountApplicationIn, user_id: str = Depends(require_u
         account_item["beneficiary"] = json.dumps(payload.beneficiary.model_dump())
     db.ACCOUNTS.put_item(Item=account_item)
 
-    # The application form gathers fuller KYC-style detail than the
-    # chat intake did — this is the "application form populates the
-    # profile" behaviour: enrich the stored client record with it.
     db.CLIENTS.update_item(
         Key={"client_id": payload.client_id},
         UpdateExpression=(

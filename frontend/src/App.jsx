@@ -4,7 +4,7 @@ import ResultsPanel from "./ResultsPanel";
 import SummaryModal from "./SummaryModal";
 import AuthForm from "./AuthForm";
 import ProfileHistory from "./ProfileHistory";
-import HomePage from "./HomePage";
+import LandingPage from "./LandingPage";
 import AccountPage from "./AccountPage";
 import NavMenu from "./NavMenu";
 import "./tokens.css";
@@ -12,18 +12,14 @@ import "./global.css";
 import "./layout.css";
 import "./animations.css";
 
-// In production this is set at build time (see .env.production) to the
-// deployed backend's real URL, since frontend (CloudFront) and backend
-// (Elastic Beanstalk) are separate domains there. Locally it falls back
-// to "/api", which vite.config.js's dev-server proxy forwards to your
-// local backend on :8000 — npm run dev needs no configuration.
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const TOKEN_STORAGE_KEY = "risk_profiler_token";
 
 export default function App() {
   const [sessionId, setSessionId] = useState(null);
   const [result, setResult] = useState(null);
-  const [recalcMap, setRecalcMap] = useState({});
+  const [recalculatedProducts, setRecalculatedProducts] = useState(null);
+  const [recalculatedNote, setRecalculatedNote] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const [activeSummary, setActiveSummary] = useState(null);
@@ -39,8 +35,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
-  // On load, validate any token we already have rather than trusting
-  // it blindly — it may have expired since it was stored.
   useEffect(() => {
     const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (!stored) {
@@ -66,22 +60,14 @@ export default function App() {
 
   const handleFinalized = (profileResult) => {
     setResult(profileResult);
-    setRecalcMap({});
-    setAccounts([]); // a freshly finalized profile has no opened accounts yet
+    setRecalculatedProducts(null);
+    setRecalculatedNote(null);
+    setAccounts([]);
   };
 
-  const handleRecalculated = (list) => {
-    setRecalcMap((prev) => {
-      const next = { ...prev };
-      list.forEach((item) => {
-        next[`${item.product_id}-${item.portfolio_id}`] = {
-          expected_value: item.expected_value,
-          lower_value: item.lower_value,
-          upper_value: item.upper_value,
-        };
-      });
-      return next;
-    });
+  const handleRecalculated = (products, note) => {
+    setRecalculatedProducts(products);
+    setRecalculatedNote(note);
     setSheetExpanded(true);
   };
 
@@ -100,11 +86,9 @@ export default function App() {
     setCurrentUser(user);
     setView("home");
     setResult(null);
-    setRecalcMap({});
+    setRecalculatedProducts(null);
+    setRecalculatedNote(null);
     setAccounts([]);
-    // Login doesn't retroactively claim whatever anonymous session was
-    // active — start clean under the now-authenticated identity so
-    // there's never an ambiguous ownership state.
     chatRef.current?.startFresh();
   };
 
@@ -114,7 +98,8 @@ export default function App() {
     setCurrentUser(null);
     setView("home");
     setResult(null);
-    setRecalcMap({});
+    setRecalculatedProducts(null);
+    setRecalculatedNote(null);
     setAccounts([]);
     chatRef.current?.startFresh();
   };
@@ -123,7 +108,10 @@ export default function App() {
     try {
       const headers = { Authorization: `Bearer ${authToken}` };
       const profileRes = await fetch(`${API_BASE}/profiles/${clientId}`, { headers });
-      if (!profileRes.ok) throw new Error("Couldn't load that profile");
+      if (!profileRes.ok) {
+        const detail = await profileRes.json().catch(() => ({}));
+        throw new Error(detail.detail || `Couldn't load that profile (${profileRes.status})`);
+      }
       const profileData = await profileRes.json();
 
       const historyRes = await fetch(
@@ -134,28 +122,40 @@ export default function App() {
 
       chatRef.current?.resumeSession(profileData.chat_session_id, history);
       setResult(profileData.profile_result);
-      setRecalcMap({});
+      setRecalculatedProducts(null);
+      setRecalculatedNote(null);
       setAccounts(profileData.accounts || []);
       setView("chat");
-    } catch {
-      // Leave the user where they were, with nothing changed, if this fails.
+    } catch (e) {
+      // Temporary: surfacing this instead of swallowing it silently so
+      // we can see exactly what's failing — replace with a proper
+      // toast once we know the real cause.
+      console.error("handleContinueProfile failed:", e);
+      alert(`Couldn't continue that profile: ${e.message}`);
     }
   };
 
-  const handleStartNew = () => {
+  // The landing page is now the entry point for starting a fresh
+  // conversation — it collects the chosen language and (optionally) an
+  // opening message (typed in the search bar, or a suggestion pill)
+  // before the chat itself ever starts, so the very first session is
+  // created with the right language rather than defaulting to English
+  // and switching mid-conversation.
+  const handleLandingStart = (text, language) => {
     if (result !== null) {
       setResult(null);
-      setRecalcMap({});
+      setRecalculatedProducts(null);
+      setRecalculatedNote(null);
       setAccounts([]);
-      chatRef.current?.startFresh();
     }
+    chatRef.current?.startWithMessage(text, language);
     setView("chat");
   };
 
   const hasResults = result !== null;
 
   if (!authChecked) {
-    return <div className="app-shell" />; // avoid a login-state flash while /auth/me resolves
+    return <div className="app-shell" />;
   }
 
   return (
@@ -163,10 +163,10 @@ export default function App() {
       <header className="app-header">
         <button type="button" className="app-header__brand" onClick={() => setView("home")}>
           <span className="app-header__mark" aria-hidden="true" />
-          <span className="app-header__name">Nedcore Bank</span>
+          <span className="app-header__name">Standard Bank</span>
         </button>
         <div className="app-header__right">
-          <span className="app-header__product">Risk Profile &amp; Portfolio Match</span>
+          <span className="app-header__product">AI Financial Guide</span>
           <button
             type="button"
             className="app-header__avatar"
@@ -180,14 +180,6 @@ export default function App() {
         </div>
       </header>
 
-      {/*
-        Single persistent chat area — NOT re-mounted between phases or
-        when navigating to another view and back. Only its wrapping
-        classes (and whether <main> is present as a sibling) change, so
-        the ChatPanel instance and its message history survive intake
-        -> results, and a trip to another view, intact. Hidden via CSS
-        rather than unmounted when another view is active.
-      */}
       <div
         className={`app-body ${hasResults ? "app-body--results" : "app-body--intake"}`}
         style={{ display: view === "chat" ? undefined : "none" }}
@@ -196,7 +188,8 @@ export default function App() {
           <main className="results-shell__main">
             <ResultsPanel
               result={result}
-              recalculatedProjections={recalcMap}
+              recalculatedProducts={recalculatedProducts}
+              recalculatedNote={recalculatedNote}
               accounts={accounts}
               authToken={authToken}
               onAccountOpened={handleAccountOpened}
@@ -230,16 +223,7 @@ export default function App() {
         </aside>
       </div>
 
-      {view === "home" && (
-        <HomePage
-          currentUser={currentUser}
-          authToken={authToken}
-          onStartNew={handleStartNew}
-          onContinueProfile={handleContinueProfile}
-          onSeeAllProfiles={() => setView("history")}
-          onGoToLogin={() => setView("login")}
-        />
-      )}
+      {view === "home" && <LandingPage onStart={handleLandingStart} />}
 
       {view === "account" && (
         <AccountPage

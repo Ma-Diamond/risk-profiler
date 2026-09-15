@@ -39,6 +39,43 @@ class BandResult:
     knowledge_band: int
 
 
+# Plain-language framing for the governed_risk_band — the raw "Band 3/5"
+# number means nothing to someone without financial background. These
+# live alongside the scoring logic (not in main.py or the frontend) so
+# the label/explanation can never drift out of sync with what a given
+# band number actually means here.
+BAND_LABELS: dict[int, str] = {
+    1: "Very Cautious",
+    2: "Cautious",
+    3: "Balanced",
+    4: "Growth-Focused",
+    5: "Aggressive Growth",
+}
+
+BAND_EXPLANATIONS: dict[int, str] = {
+    1: (
+        "We've matched you with the most capital-stable options available. Protecting "
+        "what you already have matters more right now than chasing higher returns."
+    ),
+    2: (
+        "A gentle mix that limits how much you could lose, while still allowing some "
+        "room to grow."
+    ),
+    3: (
+        "A balanced mix of growth and stability — comfortable with some ups and downs "
+        "along the way in exchange for better long-term returns."
+    ),
+    4: (
+        "Tilted toward growth. You're comfortable with real short-term swings in your "
+        "investment's value, in exchange for stronger long-term potential."
+    ),
+    5: (
+        "Full growth focus. You're comfortable with significant ups and downs along "
+        "the way, in pursuit of the highest long-term potential."
+    ),
+}
+
+
 def tolerance_band(questionnaire: list[int]) -> int:
     """Map a 5-question, 1-5-per-question risk-attitude questionnaire
     to a 1-5 band using its total score (range 5-25)."""

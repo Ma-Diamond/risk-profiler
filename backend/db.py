@@ -295,6 +295,7 @@ def seed_catalog() -> None:
             batch.put_item(
                 Item={
                     "product_id": product_key_to_id[p["key"]],
+                    "key": p["key"],
                     "name": p["name"],
                     "provider": p["provider"],
                     "tax_wrapper": p["tax_wrapper"],

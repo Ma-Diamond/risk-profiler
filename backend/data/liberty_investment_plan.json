@@ -1,0 +1,146 @@
+{
+  "product_id": "liberty_investment_plan",
+  "product_name": "Liberty Flexible Investment Plan (Investment Plan and Investment Plan with Income)",
+  "provider": "Liberty",
+  "category": "Single Premium Investment (Growth Investment Series)",
+  "source_documents": [
+    {
+      "file_name": "investment-plan-and-investment-plan-with-income.pdf",
+      "version": "1.28",
+      "last_modified": "2021-04-23"
+    }
+  ],
+  "about": {
+    "investment_plan": "A single premium life policy where policy benefits are determined by reference to underlying assets held by the insurer. Minimum term of 5 years; allows exposure to more than one investment portfolio; provides a facility to phase in initial and ad hoc considerations via a money market portfolio. Aimed at high-income investors with sophisticated investment market knowledge who want ownership of investment decision-making.",
+    "investment_plan_with_income": "A single premium life policy consisting of two portions: (1) the Investment Plan portion, operating the same as the Investment Plan, and (2) a Guaranteed Income Annuity portion - a fixed-interest annuity paid monthly, with income that can be level or escalate in the first 5 years, at the maximum level or any selected level below maximum.",
+    "source_section": "page 4, About the products"
+  },
+  "eligibility": {
+    "investment_plan": "Available to individuals, companies, trusts, and untaxed entities. Only a natural person can be the life assured.",
+    "investment_plan_with_income": "Only available to individuals. Only a natural person can be the life assured.",
+    "entry_age_min": "1 next birthday",
+    "entry_age_max": "85 next birthday",
+    "source_section": "page 12, sections 15-16"
+  },
+  "premiums": {
+    "investment_plan": {
+      "minimum_premium_per_policy": "R12,500",
+      "minimum_premium_per_portfolio": "R2,500"
+    },
+    "investment_plan_with_income": {
+      "minimum_premium_per_policy": "R17,500",
+      "minimum_premium_per_portfolio": "R2,500"
+    },
+    "additional_premiums": {
+      "ad_hoc_minimum": "R10,000",
+      "restriction": "Ad hoc premium is limited such that total premiums in any policy year do not exceed 120% of the greater of premiums paid in the previous two years (to avoid triggering a new 5-year restriction period).",
+      "annuity_note": "No ad hoc premiums allowed on the Guaranteed Income Annuity portion."
+    },
+    "single_premium": true,
+    "source_section": "page 5, 15"
+  },
+  "annuity_details": {
+    "applicable_to": "Investment Plan with Income only",
+    "features": [
+      "Set for a period of five years from inception or until death of the life assured.",
+      "Liberty guarantees annuity payments for the term.",
+      "Can be level or escalating at a set percentage over the 5-year period, selected by the investor.",
+      "Interest on the annuity is taxed at the investor's marginal tax rate; capital content of each payment is tax-free.",
+      "Paid monthly in arrears on the date the money was loaded (no other frequency available)."
+    ],
+    "source_section": "page 6, section 8"
+  },
+  "benefits": {
+    "death_benefit": {
+      "investment_plan": "Greater of: (1) Initial consideration less advances/advisory fees/charges, and (2) value of the investment account at date of death.",
+      "investment_plan_with_income": "Commuted value of outstanding income payments plus the greater of: (1) Investment Plan Initial Consideration less withdrawals/advisory fees, and (2) value of the Investment account at date of death.",
+      "beneficiaries_max": 6,
+      "no_beneficiaries_nominated": "Paid to policyholder or policyholder's estate.",
+      "ceded_policy": "Death benefits payable to the cessionary.",
+      "source_section": "pages 6-8, section 11.1"
+    }
+  },
+  "fees": {
+    "initial_advisory_fee": {
+      "range": "0% to 5% (limited for some distribution channels) of Initial Consideration",
+      "deducted_from": "Initial Consideration invested; also applies to ad hoc investment amounts."
+    },
+    "ongoing_commission": [
+      {"ongoing_commission": "0% p.a.", "recovery_fee": "0% p.a."},
+      {"ongoing_commission": "0.25% p.a.", "recovery_fee": "0.285% p.a."},
+      {"ongoing_commission": "0.50% p.a.", "recovery_fee": "0.570% p.a."}
+    ],
+    "ongoing_commission_note": "Recovery fee deducted monthly from investment account for 5 years; payable to intermediary; investor can cancel at any time.",
+    "annuity_commission": "Maximum 1.5% of premium for Guaranteed Income Annuity (Investment Plan with Income).",
+    "allocation_enhancement": [
+      {"from": "R0", "to": "R49,999", "enhancement": "0.5%"},
+      {"from": "R50,000", "to": "R149,999", "enhancement": "1.0%"},
+      {"from": "R150,000", "to": "R999,999", "enhancement": "2.0%"},
+      {"from": "R1,000,000", "to": "R4,999,999", "enhancement": "3.1%"},
+      {"from": "R5,000,000", "to": "Unlimited", "enhancement": "3.6%"}
+    ],
+    "management_fee": "1.92% p.a. of investment value (Investment Plan / Investment Plan portion).",
+    "foreign_currency_fee": "Additional 0.48% p.a. management fee on specified offshore portfolios (e.g. Excelsior Global range, Liberty Offshore range, STANLIB Global funds).",
+    "policy_fee": "Not applicable for Investment Plan; R18 per annuity payment for Investment Plan with Income.",
+    "early_termination_charge": {
+      "applies_when": "Advance or surrender taken in first 5 years.",
+      "schedule_summary": "Starts at 4.00% in month 1, reducing progressively to 0.00% by month 49 onwards.",
+      "source_section": "page 11, section 12.11"
+    },
+    "source_section": "pages 8-11, section 12"
+  },
+  "guarantees": {
+    "options": ["Capital (protects investment value against negative returns)", "Capital Plus (secures initial consideration plus an additional agreed minimum return)"],
+    "guarantee_date": "5th policy anniversary, applies if invested for the full 5 years.",
+    "max_guaranteed_portfolio_investment": "R10,000,000 per single premium",
+    "cancellation_triggers": ["Switching investment portfolios", "Taking advances", "Advisory fees taken after first option date"],
+    "source_section": "pages 12-13, section 17"
+  },
+  "surrenders_advances": {
+    "legislative_limit": "One loan (advance) and one withdrawal (full surrender) permitted during first 5 years; sum may not exceed premium plus 5% p.a. compound interest.",
+    "advances": {
+      "first_year": "No advances allowed.",
+      "year_2_to_5": "One advance allowed, restricted to max 90% of investment value less charges, less any previous advance.",
+      "after_5_years": "Unlimited advances subject to Section 54 (20% rule) restrictions."
+    },
+    "full_surrenders": {
+      "restriction": "Max 90% of investment value less charges, less any previous advance."
+    },
+    "annuity_portion": "Surrender value is future payments discounted at prevailing risk discount rate; Investment Plan and annuity portions cannot be surrendered independently.",
+    "source_section": "page 17, section 35"
+  },
+  "portfolio_rules": {
+    "max_portfolios_per_policy": 7,
+    "phasing_in_option": {
+      "available_via": ["Standard Bank Money Market", "Liberty Dollar Money Portfolio", "Liberty Euro Money Portfolio", "Liberty Sterling Money Portfolio"],
+      "min_period_months": 2,
+      "max_period_months": 12,
+      "cost": "Free"
+    },
+    "joint_lives_investment_plan": "Maximum 5 lives assured per policy.",
+    "joint_lives_investment_plan_with_income": "Maximum 1 life assured per policy.",
+    "source_section": "pages 13-14"
+  },
+  "ownership": {
+    "investment_plan": "Individuals, trusts, and companies allowed. Security and outright cessions available.",
+    "investment_plan_with_income": "Only individuals allowed. Absolute cessions not allowed (collateral cessions allowed); absolute cession possible after initial 5 years.",
+    "source_section": "page 15, section 27"
+  },
+  "policy_term": "Initial policy term is 5 years; open-ended thereafter.",
+  "faqs": [],
+  "version_history": [
+    {"description": "New document", "date": "16 July 2009", "version": "1.0"},
+    {"description": "Name update", "date": "21 September 2009", "version": "1.1"},
+    {"description": "New template update", "date": "12 January 2010", "version": "1.2"},
+    {"description": "Updated link to portfolio grid", "date": "10 March 2010", "version": "1.3"},
+    {"description": "Updated Property portfolio restriction", "date": "17 June 2010", "version": "1.4"},
+    {"description": "Updated offshore restriction percentage", "date": "2 December 2010", "version": "1.5"},
+    {"description": "Updated charges on annuity portion", "date": "13 January 2011", "version": "1.6"},
+    {"description": "Updated Death Benefit, Ownership paragraphs and Guarantee charges", "date": "13 April 2011", "version": "1.7"},
+    {"description": "Updated wording", "date": "24 March 2012", "version": "1.8"},
+    {"description": "Surrender/advances clarification", "date": "05 August 2013", "version": "1.2 (sic, per source document)"}
+  ],
+  "validation_notes": [
+    "Document is marked 'FOR INTERNAL USE ONLY' - version 1.28, dated 23 April 2021."
+  ]
+}

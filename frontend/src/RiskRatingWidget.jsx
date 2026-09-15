@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const LABELS = ["Disagree", "", "", "", "Agree"];
+const LABELS = ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"];
 
 export default function RiskRatingWidget({ questions, onSubmit, disabled }) {
   const [ratings, setRatings] = useState(Array(questions.length).fill(null));
@@ -17,6 +17,7 @@ export default function RiskRatingWidget({ questions, onSubmit, disabled }) {
 
   return (
     <div className="risk-widget">
+      <p className="risk-widget__instructions">Rate how much you agree with each statement:</p>
       {questions.map((q, i) => (
         <div key={i} className="risk-widget__row">
           <p className="risk-widget__question">{q}</p>
@@ -31,7 +32,7 @@ export default function RiskRatingWidget({ questions, onSubmit, disabled }) {
                   disabled={disabled}
                 />
                 <span className="risk-widget__radio-dot">{value}</span>
-                {LABELS[value - 1] && <span className="risk-widget__scale-label">{LABELS[value - 1]}</span>}
+                <span className="risk-widget__scale-label">{LABELS[value - 1]}</span>
               </label>
             ))}
           </div>

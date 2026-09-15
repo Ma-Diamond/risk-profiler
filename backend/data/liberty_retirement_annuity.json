@@ -1,0 +1,236 @@
+{
+  "product_id": "liberty_retirement_annuity",
+  "product_name": "Liberty Retirement Annuity (Liberty Retirement Range)",
+  "provider": "Liberty Group Limited (Authorised FSP no. 2409, part of Standard Bank Group)",
+  "category": "Retirement Annuity (Pre-Retirement, Liberty Retirement Range)",
+  "source_documents": [
+    {
+      "file_name": "21063LibertyTechSpecforLibertyRetirementRange.pdf",
+      "version": "8.1",
+      "last_modified": "2025-05-14",
+      "note": "FOR INTERNAL USE ONLY. Supersedes the earlier 'Retirement Annuity Builder' document previously mapped to this product_key - that mapping has been replaced with this document per user confirmation."
+    }
+  ],
+  "about": "If you apply for the Liberty Retirement Annuity, you are applying for membership of the Lifestyle Retirement Annuity Fund, an approved retirement fund registered with the Registrar of Pension Funds. A lump sum/recurring investment retirement annuity, flexible in that recurring investments can be started, increased or stopped at any time without cost. Provides for your retirement or supplements existing retirement planning, with the flexibility to structure the investment per your requirements. Members can invest a portion in the Exact Income Fund and/or a range of other investment portfolios. The Lifestyle Retirement Annuity Fund is subject to the Pension Funds Act and Income Tax Act; the underlying investment (Liberty Retirement Annuity) is subject to the Long-Term Insurance Act. Where the Exact Income Fund is selected, that portion is underwritten in a separate fund member policy from the Other Investment Portfolios portion - together the two policies form the entire Investment (packaged as a single quote/single policy document for the adviser).",
+  "product_structure": {
+    "policy_1": "Other Investment Portfolios",
+    "policy_2": "Exact Income Fund (optional)",
+    "source_section": "page 3, Liberty Retirement Range overview"
+  },
+  "key_features": [
+    {
+      "feature": "Exact Income Fund",
+      "description": "South Africa's first and only retirement annuity/preservation fund suite that lets you know today exactly what your retirement income will be at retirement and guarantees it, regardless of market performance. Each new investment purchases a level of guaranteed income from retirement known at the outset.",
+      "source_section": "page 3, 7"
+    },
+    {
+      "feature": "Equivalent Portfolio Return (EPR)",
+      "description": "A yardstick showing the level of return another portfolio must give to match the outcome of the Exact Income Fund, calculated using today's annuity rates at the point of investment; used only to contextualize investment choice at the time of investment.",
+      "source_section": "page 7"
+    },
+    {
+      "feature": "Regulation 28 monitoring",
+      "description": "Liberty monitors both policies in the Liberty Retirement Range investment as one package quarterly to ensure Regulation 28 compliance (max 75% equity exposure); non-compliant assets may be moved to a money market fund if the member doesn't act after notification.",
+      "source_section": "page 7"
+    },
+    {
+      "feature": "Flexible recurring investments",
+      "description": "Can be started, increased, or stopped at any time at no cost.",
+      "source_section": "page 6, 24"
+    }
+  ],
+  "exact_income_fund": {
+    "guideline_allocations_by_age": [
+      {"age_band": "More than 20 years to retirement", "guideline_allocation": "0%", "maximum_allocation": "0%"},
+      {"age_band": "Less than 20 years to retirement, below age 35", "guideline_allocation": "0%", "maximum_allocation": "0%"},
+      {"age_band": "35 to 39", "guideline_allocation": "2.5%", "maximum_allocation": "5%"},
+      {"age_band": "40 to 44", "guideline_allocation": "5%", "maximum_allocation": "10%"},
+      {"age_band": "45 to 49", "guideline_allocation": "15%", "maximum_allocation": "40%"},
+      {"age_band": "50 to 54", "guideline_allocation": "25%", "maximum_allocation": "80%"},
+      {"age_band": "55 and over", "guideline_allocation": "25%", "maximum_allocation": "100%"}
+    ],
+    "max_period_to_retirement": "20 years - beyond this, no investment allowed in the Exact Income Fund.",
+    "max_age_for_investment": "90 - after 90, money is switched to a money market fund (STANLIB Money Market Fund or similar).",
+    "life_expectancy_thresholds": "Currently 85 (men) / 89 (women); if average 65-year-old annuitant expected to live past 100 (men)/104 (women) at selected retirement date, alternative income options apply (delayed retirement age, reduced income for life, or same income until age 100/104 then reduced).",
+    "medical_underwriting_on_exit": "Required if switching out of the Exact Income Fund before benefits are due; exit value adjusted based on health/life expectancy relative to average Liberty annuitants and may be significantly less than originally invested. Also affected by prevailing interest rates (illustration: R1,000 today could become R890 same rates, R1,124 if rates drop 1%, or R706 if rates rise 1%).",
+    "annuity_type_at_retirement": "Single-life non-escalating life annuity (no guarantee period), underwritten by Liberty, subject to Liberty's minimum income requirement.",
+    "source_section": "pages 3-4, 14-17, 22-23"
+  },
+  "automatic_contribution_increase": {
+    "range": "0% p.a. to 20% p.a.",
+    "condition": "Only if recurring investment amounts selected.",
+    "change_cost": "No cost to change at any time.",
+    "source_section": "page 8"
+  },
+  "access_to_benefits": {
+    "general_rule": "Benefits cannot be accessed before age 55 unless early retirement due to ill health, or a legislatively regulated withdrawal.",
+    "savings_component": {
+      "description": "May withdraw all or a portion before retirement (once per year of assessment, 1 March - end Feb); minimum R2,000 net of charges.",
+      "second_withdrawal": "Only allowed on termination of membership if Savings Component value is below R2,000.",
+      "tax": "Taxed at marginal rate via SARS tax directive."
+    },
+    "vested_component": {
+      "cash_lump_sum_withdrawal_conditions": [
+        "Total investment value in the Fund is below a prescribed legislative limit (aggregated across all RA contracts in the Fund).",
+        "Emigrant with SARB-recognised emigration (applications on/before 28 Feb 2021, approved on/before 28 Feb 2022).",
+        "Non-SA-tax-resident for an uninterrupted period of 3+ years on/after 1 March 2021.",
+        "Departed South Africa at expiry of a visa under the Immigration Act No 13 of 2002."
+      ],
+      "tax": "Taxed per lump sum withdrawal tax tables (first R27,500 tax-free)."
+    },
+    "retirement_component": "Cash lump sum withdrawal conditions same as Vested Component; no access as lump sum at retirement (must purchase an annuity).",
+    "deductions_allowed": ["Divorce order amounts to non-member spouse", "Maintenance order amounts"],
+    "reallocation_rules": "Can reallocate from Vested to Retirement Component, and Savings to Retirement Component; cannot reallocate INTO Vested or Savings, or OUT of Retirement Component.",
+    "source_section": "pages 8-11"
+  },
+  "eligibility": {
+    "member_type": "Only individuals (natural persons) can be members.",
+    "life_assured": "1 life assured allowed; must be the same person as the member.",
+    "entry_age_min": "1 next birthday",
+    "entry_age_max": "85 next birthday (new business)",
+    "max_age_exact_income_fund": "90 (thereafter switched to money market fund)",
+    "source_section": "page 21"
+  },
+  "premiums": {
+    "minimum_initial_lump_sum": "R15,000",
+    "minimum_initial_recurring": "R500 p.m.",
+    "minimum_per_portfolio": "R100",
+    "minimum_additional_investment": "R15,000 (lump sum) or R1,000 p.m. (recurring)",
+    "investment_frequency": "Any frequency allowed (monthly, quarterly, semi-annual, annual) or as-and-when (ad hoc) investments, since structured as a multiple lump sum investment product.",
+    "additional_premiums_note": "Not subject to Section 54 of the Long-Term Insurance Act constraints; Initial Advice Fees apply at the agreed level.",
+    "backdating": "Not allowed - has cost implications to Liberty if it occurs.",
+    "source_section": "pages 11, 13, 24"
+  },
+  "beneficiaries_max": 6,
+  "beneficiaries_note": "Section 37C of the Pension Funds Act requires trustees of the Fund to decide distribution between actual dependents and nominated beneficiaries.",
+  "benefits": {
+    "death_benefit": {
+      "formula": "Investment Value on date Liberty receives notification of death, less any applicable tax.",
+      "no_beneficiaries": "Paid to the Member's estate.",
+      "payment_form": "Payable as an annuity (less tax), dependent on annuity rates on the date the annuity is bought; may be possible to take some/all as a cash lump sum subject to legislation.",
+      "source_section": "page 14"
+    },
+    "retirement_benefits": {
+      "normal_retirement_age": 55,
+      "vested_benefit": "Full amount as retirement lump sum, or purchase an annuity for regular income.",
+      "non_vested_benefit": "Max 1/3 as retirement lump sum; balance must purchase an annuity.",
+      "savings_component": "Can take as retirement lump sum, or transfer to Retirement Component to purchase an annuity.",
+      "retirement_component": "Cannot access as lump sum; full value must purchase an annuity.",
+      "de_minimis_threshold": "R165,000 - if Retirement Component + 2/3 of Non-Vested Benefits is below this, full amount can be taken as lump sum (subject to change).",
+      "multiple_annuities": "Allowed, provided each purchase exceeds R165,000.",
+      "tax": "Annuities taxed via PAYE; lump sums taxed per SARS retirement lump sum tax tables.",
+      "source_section": "pages 14-15"
+    },
+    "ill_health_retirement": {
+      "condition": "Member permanently incapable of performing duties of their occupation immediately before ill health; can retire before age 55.",
+      "benefit": "Investment Value on the date the Member actually retires from the Fund.",
+      "source_section": "page 16"
+    }
+  },
+  "fees": {
+    "initial_advice_fee": {
+      "max_voluntary": "3% (excl. VAT)",
+      "transfers_from_other_ra_fund": "0%",
+      "claw_back": "Does not apply",
+      "note": "Applies to lump sum, additional lump sum, and recurring investments; can differ between recurring and lump sum."
+    },
+    "commission": "No commission payable as defined under the Long-Term Insurance Act; Liberty facilitates advice fees negotiated directly between adviser and member under FAIS. No regulated maximum, but Liberty limits to industry best practice.",
+    "ongoing_advice_fee": {
+      "exact_income_fund": "Up to 0.5% p.a. (excl. VAT) of initial investment value, included in pricing, paid monthly; increases via an OAF roll-up rate set by Liberty. If member agrees to a lower OAF, the difference is reinvested into the Exact Income Fund.",
+      "other_investment_portfolios": "Up to 1% p.a. (excl. VAT) of investment value, deducted monthly as explicit unit deduction; ceases if adviser changes and no new instruction is received."
+    },
+    "platform_fee": {
+      "exact_income_portion": "No platform fee payable.",
+      "other_portfolios_tiers": [
+        {"band": "First R1m", "fee_pa": "0.575%"},
+        {"band": "Next R2m", "fee_pa": "0.345%"},
+        {"band": "Next R7m", "fee_pa": "0.230%"},
+        {"band": "Amounts above R10m", "fee_pa": "0.115%"}
+      ],
+      "aggregation": "Investment values from other qualifying Liberty products (Evolve Investment Plan, Evolve Investment Plan Sinking Fund, GateWay Investment Plan, Evolve Retirement Annuity, Evolve Pension/Provident Fund Preserver, Retirement Annuity, Pension/Provident Fund Preserver, Liberty Offshore Investment Plan, Liberty Living Annuity) are aggregated to lower the applicable platform fee band. Liberty Offshore Investment Plan value converted from USD to ZAR at prevailing exchange rate before aggregation."
+    },
+    "portfolio_fee": "Cost of asset management, differs by portfolio, deducted implicitly in unit price daily; see fund fact sheets for TER (measured over most recent 36-month period) and transaction costs.",
+    "early_termination_fee": "None applies, EXCEPT where a Member transferred from an existing Liberty retirement policy with existing early termination/paid-up charges - those charges carry over and reduce evenly each month until the end of the period.",
+    "service_fees": "None apply to this product.",
+    "source_section": "pages 18-21"
+  },
+  "portfolio_rules": {
+    "max_portfolios_other_investments": 7,
+    "exact_income_fund_counts_as": "An additional 1 portfolio (on top of the 7 for other investment portfolios).",
+    "phasing_in": "Allowed for Other Investment Portfolios, phasing in from the STANLIB Money Market Fund.",
+    "risk_profiling_tool": "Blueprint Risk Analysis (Blueprint Online Servicing includes a Regulation 28 calculator).",
+    "source_section": "pages 23-24"
+  },
+  "joint_lives": "Only one member per investment allowed; the member is also the life assured.",
+  "ownership": {
+    "owner": "The Lifestyle Retirement Annuity Fund (PF 12/8/6776) owns the investment.",
+    "payer_and_life_assured": "The member.",
+    "cessions": "May NOT be ceded (absolute or collateral)."
+  },
+  "surrenders_advances": "Surrenders and advances are NOT allowed on Retirement Annuities as per legislation. Access is only via legislative withdrawals and early retirement due to ill health.",
+  "switching": {
+    "cost": "No fees levied on switching (except buy/sell spread if applicable on the destination portfolio).",
+    "turnaround": "Within 7 business days at the next available price.",
+    "medical_underwriting_trigger": "Required if switching out of the Exact Income Fund, transferring to another fund, taking a legislative withdrawal, or using Exact Income Fund proceeds to purchase another annuity at retirement.",
+    "constraints": "Switches must satisfy Regulation 28; if a portfolio is capped/closed or otherwise restricted, Liberty will notify the member and invest in a similar portfolio or the STANLIB Money Market Fund if no response is received.",
+    "source_section": "pages 26-27"
+  },
+  "cooling_off": "Not possible to withdraw from this investment after implementation due to the nature of the product; can only move to another approved retirement fund or take a legislatively-permitted withdrawal.",
+  "investment_term": "No minimum term; open-ended if the member doesn't retire at the selected date. Never 'forced' to retire.",
+  "retirement_regulation_components": {
+    "effective_date": "2024-09-01",
+    "vested_component": "Retirement savings accumulated immediately prior to 1 Sept 2024 (less seed capital), consisting of vested and non-vested benefits; subject to pre-1 Sept 2024 fund rules.",
+    "seed_capital": "10% of retirement savings value as at 31 Aug 2024, capped at R30,000, transferred to Savings Component (provident fund members 55+ on 1 March 2024 could opt out).",
+    "savings_component": "Seed capital (if any) plus one-third of contributions (less charges/risk premiums) from 1 Sept 2024 onward, plus fund returns.",
+    "retirement_component": "Two-thirds of contributions (less charges/risk premiums) from 1 Sept 2024 onward, plus fund returns.",
+    "source_section": "pages 27-28"
+  },
+  "case_study_example": {
+    "scenario": "John, age 45, invests R100,000 (agrees 3.45% IAF on Exact Income Fund portion at max 40% allocation for his age, 0% IAF on other portfolios); also invests R1,000/month recurring at 3.45% IAF on both portions.",
+    "guaranteed_income_at_60_from_lump_sum": "R9,000 p.a.",
+    "guaranteed_income_at_60_from_first_recurring_investment": "R93 p.a.",
+    "equivalent_portfolio_return_lump_sum": "7.2% p.a.",
+    "equivalent_portfolio_return_recurring": "7.1% p.a.",
+    "source_section": "pages 28-31"
+  },
+  "faqs": [
+    {
+      "question": "What happens if I decide to retire later than my original selected retirement age?",
+      "answer": "The investment value and OAF reference account/OAF level don't change, but since the Exact Income only starts later (fewer expected payments), the guaranteed monthly income amount increases (e.g. R1,550/month from age 60 could become R2,200/month from age 65).",
+      "source_section": "page 30"
+    },
+    {
+      "question": "Can I take some of my investment as cash at retirement and use the rest differently?",
+      "answer": "Yes - e.g. take up to a third in cash (subject to tax), then convert the Exact Income Fund portion's income to a CPI-linked annuity, and use the Other Investment Portfolios' capital to purchase a supplementary living annuity.",
+      "source_section": "page 31"
+    }
+  ],
+  "entry_points_contacts": {
+    "new_business": "newbusiness@liberty.co.za (1-2 business days)",
+    "money_allocations_liberty_retirement_range_evolve": "opsfinancedepartment@liberty.co.za (1-2 business days)",
+    "special_quotes": "Special.quotes@liberty.co.za (4 hours)",
+    "policy_documents": "LibInvPolDocs@liberty.co.za (1-2 business days)",
+    "switches_adhocs_phasing_fees": "info@liberty.co.za (3-6 business days)",
+    "payment_requests": "info@liberty.co.za (3-8 business days)",
+    "refunds_right_to_withdraw": "info@liberty.co.za (7-210 business days)",
+    "transfers_section_14": "info@liberty.co.za (5-7 business days)",
+    "source_section": "page 32"
+  },
+  "version_history": [
+    {"description": "New document", "date": "08 July 2015", "version": "Draft copy"},
+    {"description": "Incorporated feedback", "date": "05 August 2015", "version": "Version 1"},
+    {"description": "PR Updates", "date": "23 September 2015", "version": "Version 2"},
+    {"description": "CD Updates", "date": "01 October 2015", "version": "Version 3"},
+    {"description": "Agile 2 Updates", "date": "August 2017", "version": "Version 4"},
+    {"description": "Portfolio and VAT updates", "date": "February 2019", "version": "Version 5"},
+    {"description": "OAF updates", "date": "August 2019", "version": "Version 6"},
+    {"description": "Wording Updates", "date": "October 2019", "version": "Version 7"},
+    {"description": "Platform fee updates, aggregation and name change", "date": "February 2025 (approx.)", "version": "Version 8"},
+    {"description": "Current version referenced throughout this JSON", "date": "14 May 2025", "version": "8.1"}
+  ],
+  "validation_notes": [
+    "This JSON REPLACES the earlier version of 'liberty_retirement_annuity.json' that was mapped from the 'Builder Series' document (Builders (1) (1).pdf) - that mapping was incorrect and has been superseded per user instruction.",
+    "Note the 'Agile 2 Updates' entry in the version history (August 2017, Version 4) - this appears to confirm the product's internal association with the 'Agile Retirement Annuity 2' naming from your original convention screenshot.",
+    "This source document also contains a full parallel spec for 'Liberty Pension/Provident Fund Preserver' - not extracted here since it doesn't yet have an assigned product_key in your naming convention. Let me know if you'd like that captured separately."
+  ]
+}
