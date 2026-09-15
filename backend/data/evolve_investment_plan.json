@@ -1,0 +1,178 @@
+{
+  "product_id": "evolve_investment_plan",
+  "product_name": "Evolve Investment Plan",
+  "provider": "Liberty Group Limited (part of Standard Bank Group)",
+  "category": "Single/Regular Premium Investment (Evolve Investment Range)",
+  "source_documents": [
+    {
+      "file_name": "20210317-Evolve-ProductTechSpecvs3.5.pdf",
+      "version": "3.8",
+      "last_modified": "2025-05-14"
+    }
+  ],
+  "about": "Offers clients access to a world-class investment from a minimum single premium of R150,000, designed for an investment horizon of at least 5 years. Offers 'pay-on-delivery' investing - clients only pay setup costs if the Target Return on the Liberty Capped Tracker portfolio is achieved. Requires clients to allocate a specified portion of investment to the Liberty Capped Tracker portfolio, with the remainder invested across a range of portfolios. Available as an Endowment (with minimum death benefit) or Sinking Fund (no death benefit, ideal for companies) - choice is made at quote stage and cannot be changed after inception.",
+  "key_features": [
+    {"feature": "Pay-on-delivery investing", "description": "No setup costs (including initial advice fees) unless Target Return on Capped Tracker is achieved."},
+    {"feature": "Bundling", "description": "Can be split into a bundle of up to 10 policies, each with different lives assured/beneficiaries/portfolios, for flexibility."},
+    {"feature": "Flexible access", "description": "After the first year, clients can access funds via an advance or full surrender of an underlying policy (on the portion not allocated to the Liberty Capped Tracker); no early termination charges on the non-capped portion."},
+    {"feature": "Four-fund taxation approach", "description": "Advantageous for high net-worth individuals."},
+    {"feature": "Optional regular contributions", "description": "Regular contributions can be invested alongside the lump sum, with an ACI of 0%-20% p.a."}
+  ],
+  "automatic_contribution_increase": {
+    "range": "0% p.a. to 20% p.a.",
+    "condition": "Only if regular contributions selected.",
+    "source_section": "page 5, section 2"
+  },
+  "eligibility": {
+    "life_assured": "Only a natural person can be a life assured under the Endowment option.",
+    "owner_options": [
+      {"client": "Natural person", "tax_fund": "T"},
+      {"client": "Family trust", "tax_fund": "T"},
+      {"client": "Company", "tax_fund": "trust K"},
+      {"client": "Untaxed institution", "tax_fund": "U"}
+    ],
+    "entry_age_endowment_min": "1 next birthday",
+    "entry_age_endowment_max": "85 next birthday",
+    "sinking_fund": "Not applicable (no lives assured)",
+    "source_section": "pages 14-15, sections 15-16"
+  },
+  "premiums": {
+    "minimum_single_premium": {
+      "bundle_no_regular": "R150,000 per bundle",
+      "bundle_with_regular": "R100,000 per bundle",
+      "per_policy_no_bundle_no_regular": "R150,000",
+      "per_policy_no_bundle_with_regular": "R100,000"
+    },
+    "minimum_regular_contribution": {
+      "monthly": "R500", "quarterly": "R1,500", "half_yearly": "R3,000", "annual": "R6,000"
+    },
+    "minimum_additional_single_premium_per_policy": "R10,000",
+    "payment_method": "Money receipted via M65 only; no direct debits for lump sums.",
+    "source_section": "page 18, section 24"
+  },
+  "allocation_amount": {
+    "target": "At least 100% allocation of initial single premium at standard 3% (excl. VAT) initial advisory fee.",
+    "tiers": [
+      {"initial_consideration": "<R1.5m", "percentage_allocated": "100%", "additional_investment_from_liberty": "0%"},
+      {"initial_consideration": "<R3m", "percentage_allocated": "101%", "additional_investment_from_liberty": "1%"},
+      {"initial_consideration": "R3m+", "percentage_allocated": "102%", "additional_investment_from_liberty": "2%"}
+    ],
+    "formula_note": "Allocated amount = Initial consideration - agreed IAF (incl. VAT) + standard advice cost enhancement (3.45%) + contribution enhancement.",
+    "source_section": "page 6, section 6"
+  },
+  "growth_sharing": {
+    "description": "Clients invest 60% (higher Target Return) or 40% (lower Target Return) of the initial consideration into the Liberty Capped Tracker portfolio.",
+    "higher_target_return": "11%",
+    "lower_target_return": "Starts Growth Sharing earlier than the normal Target Return portfolio (~7% per FAQ section on the Evolve range).",
+    "growth_sharing_deduction_schedule": [
+      {"end_of_year": 1, "deduction_pct_of_investment": "5.00%"},
+      {"end_of_year": 2, "deduction_pct_of_investment": "2.50%"},
+      {"end_of_year": "3 and onwards", "deduction_pct_of_investment": "0.00%"}
+    ],
+    "after_3_years": "All Growth Sharing ends; money in Capped Tracker portfolio switches to Top 40 Tracker Portfolio; clients receive full ALSI Top 40 return (incl. dividends).",
+    "source_section": "pages 8-10, section 11.3"
+  },
+  "benefits": {
+    "death_benefit": {
+      "endowment": {
+        "formula": "Higher of: (1) Investment Value on date of notification of death plus investment enhancement, or (2) total contributions paid less advances taken and advisory fees paid after 5th plan anniversary.",
+        "notes": "Payable only on death of last surviving life assured; reduced by initial/ongoing advice fees deducted after 5th policy anniversary; guaranteed maturity value does not apply.",
+        "max_beneficiaries": 6
+      },
+      "sinking_fund": "No minimum death benefit applicable.",
+      "source_section": "pages 7-8, section 11.1"
+    }
+  },
+  "fees": {
+    "initial_advice_fee": {
+      "max_broker": "5% (excl. VAT)",
+      "max_agency_entrepreneurs": "3% (excl. VAT)",
+      "standard_enhancement": "3% (excl. VAT) added back at inception"
+    },
+    "premium_enhancement": [
+      {"from": "R150,000", "to": "R1,499,999", "enhancement": "n/a"},
+      {"from": "R1,500,000", "to": "R2,999,999", "enhancement": "1.00%"},
+      {"from": "R3,000,000", "to": "Above", "enhancement": "2.00%"}
+    ],
+    "platform_charge": "0.3% p.a. of investment value",
+    "portfolio_charges": [
+      {"portfolio": "Liberty Single Manager Risk Profiled Portfolios", "charge": "0.80% p.a."},
+      {"portfolio": "Liberty Tracker Risk Profiled Portfolios", "charge": "0.175% p.a."},
+      {"portfolio": "Liberty Global Equity Tracker", "charge": "0.70% p.a."},
+      {"portfolio": "Liberty Global Bond Tracker", "charge": "0.70% p.a."},
+      {"portfolio": "Liberty Multi-manager Risk Profiled portfolios", "charge": "1.40% p.a."},
+      {"portfolio": "Liberty CPI Plus", "charge": "0.80% p.a. + performance fee (0% to 0.371% p.a.)"},
+      {"portfolio": "Liberty Listed Property", "charge": "0.90% p.a."},
+      {"portfolio": "Liberty Property", "charge": "0.90% p.a."},
+      {"portfolio": "Liberty Cash Tracker", "charge": "0.05% p.a."},
+      {"portfolio": "Liberty Bond Tracker", "charge": "0.10% p.a."},
+      {"portfolio": "Liberty Top 40 Tracker", "charge": "0.20% p.a."},
+      {"portfolio": "Liberty Capped Tracker", "charge": "0.20% p.a."},
+      {"portfolio": "External unit trusts", "charge": "As per underlying asset manager"}
+    ],
+    "ongoing_commission": "0.25% - 0.50% (excl. VAT); stops after 5th policy anniversary.",
+    "ongoing_advice_fee": "0% - 0.5% (excl. VAT); only available after 5th policy anniversary for endowments/sinking funds.",
+    "renewal_advice_fee": "Up to 5% (excl. VAT), agreed at/after 5 years for new advisers, every 5 years thereafter.",
+    "early_termination_charge": "Does not apply, although unit price adjusted for outstanding Growth Sharing Deduction within first 3 years.",
+    "service_fees": "None applicable.",
+    "source_section": "pages 11-14, section 12"
+  },
+  "guarantees": {
+    "type": "Return of contribution guarantee (C-type) available on select portfolios.",
+    "guarantee_date": "5th policy anniversary and every 5 years thereafter.",
+    "capped_tracker_with_guarantee": "Within first 3 years, clients can switch to another guaranteed portfolio (subject to Growth Sharing Deduction) or a non-guaranteed portfolio (subject to Growth Sharing Deduction). At end of 3 years, guaranteed Capped Tracker automatically transfers to Liberty Top 40 Tracker with guarantee.",
+    "source_section": "pages 15-16, section 17"
+  },
+  "portfolio_rules": {
+    "max_portfolios_per_policy": 7,
+    "mandatory_capped_tracker": "One of the portfolios must be the Liberty Capped Tracker in the first 3 years.",
+    "guaranteed_portfolio_limit": "Total initial considerations above R10,000,000 into guaranteed portfolios require a special quote.",
+    "source_section": "page 17, section 21"
+  },
+  "joint_lives": "Endowment: max 5 lives assured per policy. Sinking Fund: not applicable.",
+  "bundling": {
+    "min_policies_per_package": 1,
+    "max_policies_per_package": 10,
+    "source_section": "page 10, section 11.6"
+  },
+  "ownership": {
+    "allowed_owners": "Individuals, trusts, companies; one owner per bundle (all policies in bundle must share the same owner type).",
+    "cessions": {
+      "first_3_years": "Collateral cessions available per underlying policy; absolute cessions not available.",
+      "thereafter": "Absolute and collateral cessions available per policy; absolutely ceded policy removed from bundle."
+    },
+    "source_section": "pages 18-19, sections 26-27"
+  },
+  "surrenders_advances": {
+    "capped_tracker_first_3_years": "No advance allowed; only access via full surrender (subject to Growth Sharing Deduction).",
+    "choice_portfolios": "Advance allowed up to 90% of investment value of this portion at any time; full surrender allowed with no Growth Sharing Deduction on this portion.",
+    "legislative_limit_first_5_years": "One advance and one surrender permitted; sum may not exceed premiums invested plus 5% p.a. compound interest.",
+    "source_section": "pages 21-22, section 36"
+  },
+  "taxation": {
+    "note": "Subject to four-fund tax on investment growth. Income tax: 30% (individuals)/28% (companies)/0% (tax-exempt). CGT: 12% (individuals)/22.4% (companies)/0% (tax-exempt). Dividends withholding tax: 20% (individuals)/0% (companies)/0% (tax-exempt).",
+    "source_section": "page 23, section 37"
+  },
+  "policy_term": "Open-ended after the legislative restriction term of 5 years.",
+  "faqs": [
+    {
+      "question": "What is the difference between the lower and higher Target Return Capped Tracker portfolios?",
+      "answer": "A lower Target Return means the client needs to invest less in the Capped Tracker portfolio (40% vs 60%) and may start sharing growth with Liberty sooner, but this does not mean the client shares more growth overall since they invest more in their choice of portfolios.",
+      "source_section": "page 59"
+    },
+    {
+      "question": "Can I mix Higher and Lower Capped Tracker Portfolios within a bundle?",
+      "answer": "No - the Capped Trackers are designed to work across policies in a bundle and cannot be mixed within the same bundle.",
+      "source_section": "page 59"
+    }
+  ],
+  "version_history": [
+    {"description": "New document", "date": "11 September 2012", "version": "1.0"},
+    {"description": "Naming convention update (Liberty Evolve becomes Evolve)", "date": "30 September 2014", "version": "2.0"},
+    {"description": "Aligned guaranteed portfolio wording to T&Cs and updated Capped Tracker target returns", "date": "17 March 2021", "version": "3.5"},
+    {"description": "2023 changes", "date": "2023", "version": "n/a"}
+  ],
+  "validation_notes": [
+    "Source document also contains 'Evolve Retirement Annuity Plan', 'Evolve Pension/Provident Fund Preserver', and 'GateWay Investment Plan' specs - Retirement Annuity portion extracted separately as 'evolve_retirement_annuity'; Preserver and GateWay not yet mapped to a product_key in your naming convention."
+  ]
+}

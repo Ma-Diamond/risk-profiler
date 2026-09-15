@@ -1,0 +1,98 @@
+{
+  "product_id": "cash_account",
+  "product_name": "SaveUp Account",
+  "provider": "Standard Bank",
+  "category": "Savings Account",
+  "source_documents": [
+    {
+      "file_name": "Standard bank SaveUp account & stash tax free.pdf",
+      "version": null,
+      "last_modified": null,
+      "note": "Interest rates effective as at 29 May 2026"
+    }
+  ],
+  "about": "A flexible savings account offering higher interest rates for clients who also hold an active Standard Bank transactional account. Can be used as a short-, medium- or long-term savings account.",
+  "key_features": [
+    {
+      "feature": "No opening deposit required",
+      "description": "Opening deposit: R0.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "Anytime access to funds",
+      "description": "Funds can be deposited and accessed at any time, without any penalties.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "Zero monthly admin fee",
+      "description": "No monthly administration fee is charged.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "Preferential interest rate",
+      "description": "Up to 6.55% interest rate applies for customers holding an active transactional account.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "UCount Rewards",
+      "description": "Grow savings by redeeming UCount Rewards points into the SaveUp account.",
+      "source_section": "page 1"
+    },
+    {
+      "feature": "No penalties",
+      "description": "Withdraw funds at any time without paying any penalties.",
+      "source_section": "page 1"
+    }
+  ],
+  "interest_rates": {
+    "effective_date": "2026-05-29",
+    "rate_note": "Rate applied for customers holding an active transactional account is the higher preferential rate shown below.",
+    "tiers": [
+      {"lower_bound": 0, "upper_bound": 24999.99, "interest_rate": "5.85%"},
+      {"lower_bound": 25000, "upper_bound": 49999.99, "interest_rate": "6.25%"},
+      {"lower_bound": 50000, "upper_bound": 99999.99, "interest_rate": "6.40%"},
+      {"lower_bound": 100000, "upper_bound": null, "interest_rate": "6.55%"}
+    ],
+    "interest_calculation": "Interest is calculated daily and paid out monthly.",
+    "source_section": "page 1-2, Interest rates depending on balance"
+  },
+  "how_it_works": [
+    "Start your savings journey with no minimum opening balance.",
+    "Earn competitive interest rates from any amount.",
+    "Get preferential interest rates when you have a qualifying Standard Bank transactional account.",
+    "Funds can be deposited and accessed at any time, without any penalties.",
+    "Interest is calculated daily and paid out monthly.",
+    "This account is low-risk and guaranteed to grow your savings."
+  ],
+  "eligibility": {
+    "requirements_to_apply_at_branch": [
+      "Be 16 years or older.",
+      "ID copy (or passport if not an SA citizen).",
+      "Proof of residence not older than 3 months."
+    ],
+    "minors": "If a minor, consent of a parent or guardian is required.",
+    "source_section": "page 2, What you'll need to apply at a branch"
+  },
+  "faqs": [
+    {
+      "question": "What is the difference between SaveUp and PureSave?",
+      "answer": "With SaveUp, you earn a higher interest rate if you also have a transactional account with Standard Bank. With PureSave, you earn interest regardless of whether you bank with Standard Bank or not.",
+      "source_section": "page 2, FAQ"
+    },
+    {
+      "question": "From what balance do you start earning interest?",
+      "answer": "You start earning interest from as little as R0.01 if you hold an active transactional account.",
+      "source_section": "page 2, FAQ"
+    },
+    {
+      "question": "Who is this account for?",
+      "answer": "Anyone looking to grow their money and have anytime access to their funds; those holding a Standard Bank transactional account also benefit from highly competitive interest rates.",
+      "source_section": "page 2, FAQ"
+    }
+  ],
+  "validation_notes": [
+    "Interest rate tiers are subject to change; effective date noted as 29 May 2026 in the source document.",
+    "Document also contains 'Stash' product information, extracted separately as product_key 'stash_tfsa'."
+  ],
+  "version_history": []
+}

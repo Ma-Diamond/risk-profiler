@@ -1,0 +1,146 @@
+{
+  "product_id": "evolve_retirement_annuity",
+  "product_name": "Liberty Evolve Retirement Annuity Plan",
+  "provider": "Liberty Group Limited (part of Standard Bank Group)",
+  "category": "Retirement Annuity (Evolve Investment Range - Pre-Retirement Investment)",
+  "source_documents": [
+    {
+      "file_name": "20210317-Evolve-ProductTechSpecvs3.5.pdf",
+      "version": "3.8",
+      "last_modified": "2025-05-14"
+    }
+  ],
+  "about": "Applying for the Evolve Retirement Annuity Plan means applying for membership of the Lifestyle Retirement Annuity Fund, an approved retirement fund registered with the Registrar of Pension Funds. A single premium retirement annuity with the option to pay regular contributions, providing flexibility to structure the policy per investment requirements. Requires allocation of a specified portion of the investment to the Liberty Capped Tracker portfolio.",
+  "regulation_28": {
+    "applies": true,
+    "max_equity_exposure": "75%",
+    "note": "The Capped Tracker tracks the Top 40 index (100% equity); Liberty monitors exposure quarterly and may move non-compliant assets to a money market fund if the member does not act after notification.",
+    "source_section": "page 25"
+  },
+  "automatic_contribution_increase": {
+    "range": "0% p.a. to 20% p.a.",
+    "condition": "Only if regular contributions selected.",
+    "source_section": "page 25, section 2"
+  },
+  "access_to_benefits": {
+    "normal_retirement_age": 55,
+    "ill_health_retirement": "Allowed before 55 with no growth sharing deduction.",
+    "savings_component_withdrawal": {
+      "description": "Members may withdraw all or a portion of their Savings Component before retirement (once per year of assessment).",
+      "min_value": "R2,000 (before charges)",
+      "growth_sharing_deduction": "Applies if withdrawal taken in first 3 years and exceeds Regulation 28 compliant amount (Option 2)."
+    },
+    "vested_and_retirement_component": "Cash lump sum withdrawals allowed before retirement under specific legislative conditions (e.g., total value below prescribed limit, emigration, non-SA-tax-residency for 3+ years).",
+    "source_section": "pages 26, 37-40"
+  },
+  "additional_premiums": {
+    "minimum_ad_hoc": "R10,000",
+    "allocation_note": "Ad hoc premiums replace the Capped Tracker portion with the equivalent uncapped Top 40 Tracker Portfolio, unless a different portfolio is specifically selected.",
+    "section_54_exempt": true,
+    "commission_payable": true,
+    "source_section": "page 27, section 4"
+  },
+  "allocation_amount": {
+    "target": "At least 100% allocation of initial single premium if standard commission negotiated.",
+    "tiers": [
+      {"single_premium": "<R1m", "percentage_allocated": "100%", "additional_investment_from_liberty": "0%"},
+      {"single_premium": "<R2.5m", "percentage_allocated": "101%", "additional_investment_from_liberty": "1%"},
+      {"single_premium": "R2.5m+", "percentage_allocated": "102%", "additional_investment_from_liberty": "2%"}
+    ],
+    "source_section": "page 27, section 6"
+  },
+  "eligibility": {
+    "member_type": "Only individuals (natural persons); member is also the life assured (1 life assured, must be same as member).",
+    "entry_age_min": "1 next birthday",
+    "entry_age_max": "85 next birthday",
+    "source_section": "page 42, sections 16-17"
+  },
+  "premiums": {
+    "minimum_single_premium": {
+      "no_regular_contributions": "R150,000 per policy",
+      "with_regular_contributions": "R100,000 per policy"
+    },
+    "minimum_recurring_contribution": {
+      "monthly": "R400", "quarterly": "R1,200", "half_yearly": "R2,400", "annual": "R4,800"
+    },
+    "minimum_additional_premium": "R10,000",
+    "source_section": "page 45, section 25"
+  },
+  "beneficiaries_max": 6,
+  "benefits": {
+    "death_benefit": {
+      "formula": "Greater of: (1) Investment value on date of notification of death plus investment enhancement, and (2) total of all contributions paid less legislative withdrawals and ongoing advisory fees paid.",
+      "payable_as": "An annuity dependent on market annuity rates; may be commuted to a lump sum on death per current legislation.",
+      "no_beneficiaries": "Paid to the member's estate.",
+      "source_section": "page 29, section 11.1"
+    },
+    "retirement_benefit": {
+      "vested_component": "Vested Benefits can be taken as a lump sum or used to purchase an annuity; Non-Vested Benefits limited to max 1/3 as lump sum, balance must purchase an annuity.",
+      "savings_component": "Can be taken fully as a lump sum, or transferred to the Retirement Component to purchase an annuity.",
+      "retirement_component": "Cannot be accessed as a lump sum; full value must purchase an annuity.",
+      "de_minimis_threshold": "R165,000 (if sum of Retirement Component + 2/3 of Non-Vested Benefits in Vested Component is below this, full amount can be taken as a lump sum).",
+      "source_section": "pages 31, 41"
+    }
+  },
+  "fees": {
+    "initial_commission": {
+      "voluntary_purchases": "Max 2.5%",
+      "compulsory_purchases_transfer_from_retirement_fund": "Max 1.5%",
+      "transfer_between_ra_funds": "No commission payable"
+    },
+    "standard_commission_enhancement": "2.85% of single premium",
+    "contribution_enhancement": [
+      {"from": "R150,000", "to": "R999,999", "enhancement": "n/a"},
+      {"from": "R1,000,000", "to": "R2,499,999", "enhancement": "1.00%"},
+      {"from": "R2,500,000", "to": "Above", "enhancement": "2.00%"}
+    ],
+    "platform_charge": "0.3% p.a. of investment value",
+    "ongoing_advice_fee": "0% - 1% (excl. VAT); up to 1% after selected retirement date.",
+    "growth_sharing_deduction_schedule": [
+      {"end_of_year": 1, "deduction_pct_of_investment": "5.00%"},
+      {"end_of_year": 2, "deduction_pct_of_investment": "2.50%"},
+      {"end_of_year": "3 and onwards", "deduction_pct_of_investment": "0.00%"}
+    ],
+    "early_termination_charge": "Not applicable, though unit price adjusted for Growth Sharing Deduction within first 3 years on transfers/switches out of Capped Tracker.",
+    "source_section": "pages 34-37, section 12"
+  },
+  "growth_sharing": {
+    "higher_target_return": "12% (requires 60% invested in Capped Tracker)",
+    "lower_target_return": "Requires 40% invested in Capped Tracker; starts Growth Sharing earlier.",
+    "after_3_years": "Growth Sharing ends; Capped Tracker portion switches into Top 40 Tracker Portfolio.",
+    "source_section": "pages 32-33, section 11.4"
+  },
+  "guarantees": {
+    "type": "Return of contribution guarantee (C-type) on select portfolios.",
+    "guarantee_dates": "First guarantee date at 5 years; subsequent every 5 years thereafter and at normal retirement date.",
+    "source_section": "page 43, section 18"
+  },
+  "portfolio_rules": {
+    "max_portfolios_per_policy": 7,
+    "mandatory_capped_tracker_first_3_years": true,
+    "guaranteed_portfolio_limit": "Total initial considerations above R10,000,000 require special quote.",
+    "source_section": "page 44, section 22"
+  },
+  "ownership": {
+    "owner": "Lifestyle Retirement Annuity Fund (PF 12/8/6776).",
+    "payer_and_life_assured": "The member.",
+    "cessions": "Not allowed."
+  },
+  "policy_term": {
+    "minimum": "5 years",
+    "maximum": "Term to selected retirement age (between age 56 and 85 next birthday); open-ended if member does not retire at selected date."
+  },
+  "surrenders_advances": "Surrenders and advances are not allowed as per legislation; access only via legislative withdrawals and early/ill-health retirement.",
+  "taxation": "Investment returns of underlying portfolios are not taxed under current legislation (no tax on interest/rental income or capital gains within the fund). Liberty issues tax certificates annually for new voluntary money invested. Lump sum withdrawals may be subject to tax per current Income Tax Act tables.",
+  "faqs": [],
+  "version_history": [
+    {"description": "New document", "date": "11 September 2012", "version": "1.0"},
+    {"description": "Naming convention for Evolve portfolios ('Evolve' becomes 'Liberty')", "date": "10 September 2015", "version": "2.3"},
+    {"description": "Changed max. OAF on RA/Preserver from 0.57% to 1.14%", "date": "7 January 2016", "version": "2.4"},
+    {"description": "2023 update", "date": "2023", "version": "n/a"}
+  ],
+  "validation_notes": [
+    "Source document also contains 'Evolve Investment Plan' (extracted separately as 'evolve_investment_plan'), 'Evolve Pension/Provident Fund Preserver', and 'GateWay Investment Plan' specs - Preserver and GateWay not yet mapped to a product_key in your naming convention.",
+    "Extensive retirement regulation definitions (Vested/Savings/Retirement Component rules effective 1 September 2024) are summarized; full detail available in source pages 37-41 and 48 if needed for deeper FAQ answers."
+  ]
+}

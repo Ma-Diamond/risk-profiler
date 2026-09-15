@@ -1,0 +1,88 @@
+{
+  "product_id": "stash_tfsa",
+  "product_name": "STASH by Liberty (Tax-Free Investment)",
+  "provider": "Liberty Group Limited",
+  "category": "Tax-Free Savings/Investment (App-based)",
+  "source_documents": [
+    {
+      "file_name": "Standard bank SaveUp account & stash tax free.pdf",
+      "version": null,
+      "last_modified": null
+    }
+  ],
+  "about": "Stash is a tax-free investment app that helps clients invest small amounts of money every day via the Stash app, backed and operated by Liberty Group Limited. Clients can invest into an SA Top 40 Shares portfolio, a Cash+ portfolio, or both.",
+  "key_features": [
+    {
+      "feature": "Daily micro-investing",
+      "description": "Stash automatically from a connected bank card from as little as R5 per day, or stash at any time with a press of a button.",
+      "source_section": "page 2, What is Stash"
+    },
+    {
+      "feature": "Portfolio choice",
+      "description": "Choose to invest in an SA Top 40 Shares portfolio, a Cash+ portfolio, or both, depending on needs and investment goals.",
+      "source_section": "page 2"
+    },
+    {
+      "feature": "Full control",
+      "description": "Use the app to pause, adjust, stop and restart how and when you invest.",
+      "source_section": "page 2"
+    },
+    {
+      "feature": "Unconditional access to funds",
+      "description": "Cash out anytime directly from the app, deposited into a connected bank card.",
+      "source_section": "page 2, 8"
+    },
+    {
+      "feature": "Stash for Kids",
+      "description": "A Stash tax-free investment can be opened for children, in the child's own name, using their own annual and lifetime tax-free limits (limited contribution features apply).",
+      "source_section": "page 3, 7"
+    },
+    {
+      "feature": "Gamified stashing options",
+      "description": "Includes 'Stash as you sweat' (5c per 20 calories/100m walked/100 steps via fitness app integration), 'Stash when it's sunny' (stashes money on sunny days), 'Stash in a tap' (manual top-ups), 'Boost your Stash' (up to R1000 pm at month-end), the '10c Challenge' (increase daily contribution by 10c per day for a year, targeting R679.50 by year end), and 'Stash with GameDay' (invest based on sporting team performance with a per-match limit).",
+      "source_section": "pages 3-5"
+    }
+  ],
+  "portfolios": {
+    "cash_plus": {
+      "description": "Grows money a little every day.",
+      "effective_annual_growth_rate": "5.5% (changing to 4.5% from 30 September 2025)",
+      "notice_period_for_changes": "31 days",
+      "source_section": "page 6"
+    },
+    "sa_top_40_shares": {
+      "description": "Performance of SA's biggest listed companies, including dividends paid to investors.",
+      "source_section": "page 6"
+    }
+  },
+  "fees": {
+    "contribution_fee": "2.5% once-off fee per contribution",
+    "loyalty_bonus": "Fee earned back as a loyalty bonus after 12 months if funds are not withdrawn within the next 12 months (effective from 1 March 2025).",
+    "source_section": "page 6"
+  },
+  "eligibility": {
+    "general": "Available via the Stash app to individual investors.",
+    "children": "A Stash tax-free investment can be opened for children, in the child's own name, subject to limited contribution features. Child must turn 18 to access certain benefits.",
+    "source_section": "page 3, 7"
+  },
+  "security": {
+    "protection_measures": [
+      "128-bit bank-level security.",
+      "Secured PIN and fingerprint authentication (where phone allows).",
+      "Personal data is always encrypted."
+    ],
+    "source_section": "page 8-9"
+  },
+  "additional_resources": {
+    "how_it_works_video": "https://www.youtube.com/playlist?list=PLRSraubiPyPx8eL_9SKDvHkxJ-6VJk_rH",
+    "stash_for_kids_link": "https://www.liberty.co.za/stash-for-kids",
+    "cash_portfolio_past_performance": "https://www.liberty.co.za/Documents/CashPortfolio.pdf",
+    "sa_top_40_past_performance": "https://www.liberty.co.za/Documents/SATop40Shares.pdf"
+  },
+  "faqs": [],
+  "validation_notes": [
+    "Document also contains 'Standard Bank SaveUp Account' information, extracted separately as product_key 'cash_account'.",
+    "Cash+ effective annual growth rate is scheduled to change from 5.5% to 4.5% as of 30 September 2025 per the source document - confirm current applicable rate given current date."
+  ],
+  "version_history": []
+}
