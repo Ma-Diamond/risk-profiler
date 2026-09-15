@@ -106,8 +106,8 @@ def match_portfolios(
 
 GOAL_TO_ALLOWED_WRAPPERS: dict[str, set[str]] = {
     "retirement": {"retirement_annuity", "preservation_fund", "discretionary"},
-    "house_deposit": {"discretionary", "tax_free_savings"},
-    "general_growth": {"discretionary", "tax_free_savings", "endowment"},
+    "house_deposit": {"discretionary", "tax_free_savings", "investment_policy", "offshore_endowment", "cash_account"},
+    "general_growth": {"discretionary", "tax_free_savings", "endowment", "offshore_discretionary", "cash_account"},
 }
 
 TAX_ADVANTAGED_WRAPPERS = {"retirement_annuity", "preservation_fund", "tax_free_savings", "endowment"}

@@ -233,11 +233,11 @@ def init_db(seed: bool = True) -> None:
         return
 
     from seed_data import (
-    PORTFOLIOS as SEED_PORTFOLIOS,
-    PRODUCTS as SEED_PRODUCTS,
-    PRODUCT_PORTFOLIO_MAPPING,
-    PORTFOLIO_RETURNS as SEED_PORTFOLIO_RETURNS,
-)
+        PORTFOLIOS as SEED_PORTFOLIOS,
+        PRODUCTS as SEED_PRODUCTS,
+        PRODUCT_PORTFOLIO_MAPPING,
+        PORTFOLIO_RETURNS as SEED_PORTFOLIO_RETURNS,
+    )
 
     portfolio_key_to_id: dict[str, int] = {}
     portfolio_id_to_product_ids: dict[int, list[int]] = {}
@@ -256,53 +256,66 @@ def init_db(seed: bool = True) -> None:
             product_key_to_id[product_key]
         )
 
-    for p in SEED_PORTFOLIOS:
-        portfolio_id = portfolio_key_to_id[p["key"]]
-        PORTFOLIOS.put_item(
-            Item={
-                "portfolio_id": portfolio_id,
-                "name": p["name"],
-                "provider": p["provider"],
-                "risk_band": p["risk_band"],
-                "max_equity_pct": dec(p["max_equity_pct"]),
-                "min_horizon_years": dec(p["min_horizon_years"]),
-                "liquidity_days": p["liquidity_days"],
-                "reg28_compliant": bool(p["reg28_compliant"]),
-                "min_knowledge_band": p["min_knowledge_band"],
-                "requires_emergency_fund": bool(p["requires_emergency_fund"]),
-                "underlying_fee_pct": dec(p["underlying_fee_pct"]),
-                "description": p["description"],
-                "product_ids": portfolio_id_to_product_ids[portfolio_id],
-            }
-        )
+    # Real fund catalog is ~80+ portfolios x 100 horizon points each —
+    # thousands of items, so batch_writer() (auto-chunks into groups of
+    # 25, retries throttled writes) instead of one put_item per row.
+    with PORTFOLIOS.batch_writer() as batch:
+        for p in SEED_PORTFOLIOS:
+            portfolio_id = portfolio_key_to_id[p["key"]]
+            batch.put_item(
+                Item={
+                    "portfolio_id": portfolio_id,
+                    "name": p["name"],
+                    "provider": p["provider"],
+                    "risk_band": p["risk_band"],
+                    "max_equity_pct": dec(p["max_equity_pct"]),
+                    "min_horizon_years": dec(p["min_horizon_years"]),
+                    "liquidity_days": p["liquidity_days"],
+                    "reg28_compliant": bool(p["reg28_compliant"]),
+                    "min_knowledge_band": p["min_knowledge_band"],
+                    "requires_emergency_fund": bool(p["requires_emergency_fund"]),
+                    "underlying_fee_pct": dec(p["underlying_fee_pct"]),
+                    "description": p["description"],
+                    "product_ids": portfolio_id_to_product_ids[portfolio_id],
+                }
+            )
 
-    for p in SEED_PRODUCTS:
-        PRODUCTS.put_item(
-            Item={
-                "product_id": product_key_to_id[p["key"]],
-                "name": p["name"],
-                "provider": p["provider"],
-                "tax_wrapper": p["tax_wrapper"],
-                "min_initial_investment": dec(p["min_initial_investment"]),
-                "min_monthly_investment": dec(p["min_monthly_investment"]),
-                "annual_platform_fee_pct": dec(p["annual_platform_fee_pct"]),
-                "advice_fee_pct": dec(p["advice_fee_pct"]),
-                "min_term_years": dec(p["min_term_years"]),
-                "description": p["description"],
-                "spec_notes": p["spec_notes"],
-            }
-        )
+    with PRODUCTS.batch_writer() as batch:
+        for p in SEED_PRODUCTS:
+            batch.put_item(
+                Item={
+                    "product_id": product_key_to_id[p["key"]],
+                    "name": p["name"],
+                    "provider": p["provider"],
+                    "tax_wrapper": p["tax_wrapper"],
+                    "min_initial_investment": dec(p["min_initial_investment"]),
+                    "min_monthly_investment": dec(p["min_monthly_investment"]),
+                    "annual_platform_fee_pct": dec(p["annual_platform_fee_pct"]),
+                    "advice_fee_pct": dec(p["advice_fee_pct"]),
+                    "min_term_years": dec(p["min_term_years"]),
+                    "description": p["description"],
+                    "spec_notes": p["spec_notes"],
+                }
+            )
 
-    for key, points in SEED_PORTFOLIO_RETURNS.items():
-        portfolio_id = portfolio_key_to_id[key]
-
-    for horizon, expected, lower, upper in points:
-        PORTFOLIO_RETURNS.put_item(
-            Item={
-                "portfolio_id": portfolio_id,
-                "horizon_years": dec(horizon),
-                "expected_return_pct": dec(expected),
-                "lower_return_pct": dec(lower),
-                "upper_return_pct": dec(upper),
-            }
-        )
+    # Every fund's curve is computed the same way now (asset-class
+    # blend via asset_class_returns.py), so one fixed methodology
+    # string applies across the board rather than a per-portfolio one.
+    methodology = "Blended from asset-class return assumptions by fund weightings (see asset_class_returns.py)"
+    with PORTFOLIO_RETURNS.batch_writer() as batch:
+        for key, points in SEED_PORTFOLIO_RETURNS.items():
+            portfolio_id = portfolio_key_to_id.get(key)
+            if portfolio_id is None:
+                print(f"db.init_db: skipping returns for unknown portfolio_key '{key}'")
+                continue
+            for horizon, expected, lower, upper in points:
+                batch.put_item(
+                    Item={
+                        "portfolio_id": portfolio_id,
+                        "horizon_years": dec(horizon),
+                        "expected_return_pct": dec(expected),
+                        "lower_return_pct": dec(lower),
+                        "upper_return_pct": dec(upper),
+                        "methodology": methodology,
+                    }
+                )
