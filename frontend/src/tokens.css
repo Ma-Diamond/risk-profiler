@@ -1,17 +1,17 @@
 :root {
   /* -- surfaces & ink -- */
-  --bg: #F5F7F6;
+  --bg: #F4F6FA;
   --surface: #FFFFFF;
-  --surface-sunken: #EEF2F0;
-  --border: #DDE5E2;
-  --ink: #10201E;
-  --ink-muted: #5B6B68;
-  --ink-faint: #8B9895;
+  --surface-sunken: #EDF0F7;
+  --border: #DCE2ED;
+  --ink: #12161F;
+  --ink-muted: #5B6472;
+  --ink-faint: #8B92A2;
 
-  /* -- brand accent -- */
-  --accent: #0B6E4F;
-  --accent-ink: #063D2C;
-  --accent-wash: #E6F2ED;
+  /* -- brand accent: Standard Bank blue (#0032A1, verified brand hex) -- */
+  --accent: #0032A1;
+  --accent-ink: #001F66;
+  --accent-wash: #E7ECFA;
 
   /* -- risk band ramp: cool (conservative) -> warm (aggressive) -- */
   --band-1: #2D6E7E;
