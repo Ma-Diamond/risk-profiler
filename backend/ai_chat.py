@@ -86,17 +86,30 @@ LANGUAGE_NAMES = {
 def _language_directive(language: str) -> str:
     """Appended to a system prompt to make the model's own replies
     multilingual — no per-string translation table needed for this
-    part, Claude just converses in the requested language directly."""
-    if language == "en" or language not in LANGUAGE_NAMES:
-        return ""
-    name = LANGUAGE_NAMES[language]
+    part, Claude just converses in the requested language directly.
+
+    Always returns an explicit instruction, even for English — it used
+    to short-circuit to "" for English on the assumption that no
+    instruction was needed since English is the default. That broke
+    switching the language back to English mid-conversation: with the
+    history already established in another language and the system
+    prompt saying nothing at all about language, the model just kept
+    going in whatever language the history was already in. Naming the
+    target language explicitly every turn, and explicitly telling it
+    to override the history if needed, fixes that regardless of which
+    direction the switch goes."""
+    name = LANGUAGE_NAMES.get(language, "English")
     return (
-        f"\n\nLANGUAGE: conduct this entire conversation in {name}. Every reply you write "
-        f"to the client — greetings, questions, explanations, everything — must be in "
-        f"{name}. Tool calls themselves (field names, and structured values like numbers "
-        f"or the fixed goal codes) stay exactly as specified in their schema regardless of "
-        f"language; only the natural-language text you write to the client needs to be in "
-        f"{name}."
+        f"\n\nLANGUAGE: every reply you write to the client — greetings, questions, "
+        f"explanations, everything — must be in {name}, starting with your very next "
+        f"reply. If earlier messages in this conversation were written in a different "
+        f"language, that's because the client just changed their language preference "
+        f"partway through — switch to {name} immediately regardless of what language "
+        f"the conversation has been in so far; don't continue in the old language just "
+        f"because the history is in it. Tool calls themselves (field names, and "
+        f"structured values like numbers or the fixed goal codes) stay exactly as "
+        f"specified in their schema regardless of language; only the natural-language "
+        f"text you write to the client needs to be in {name}."
     )
 
 
@@ -137,28 +150,28 @@ TOL_QUESTIONS_TRANSLATED = {
 
 OPENING_MESSAGES = {
     "en": {
-        "new": "Hi! I'm here to help figure out the right investment risk profile for you — it's just a conversation, no forms. Let's start simple: what's your name?",
-        "name_only": "Hi {name}! I'm here to help figure out the right investment risk profile for you — it's just a conversation, no forms. Let's start with your age — how old are you?",
+        "new": "Hi! I'm Horizon AI — here to help figure out the right investment risk profile for you. It's just a conversation, no forms. Let's start simple: what's your name?",
+        "name_only": "Hi {name}! I'm Horizon AI — here to help figure out the right investment risk profile for you. It's just a conversation, no forms. Let's start with your age — how old are you?",
         "returning": "Welcome back, {name}! Last time you told us you're {recap}. Does that all still look right, or has anything changed?",
     },
     "pt": {
-        "new": "Olá! Estou aqui para ajudar a descobrir o perfil de risco de investimento certo para você — é só uma conversa, sem formulários. Vamos começar de forma simples: qual é o seu nome?",
-        "name_only": "Olá {name}! Estou aqui para ajudar a descobrir o perfil de risco de investimento certo para você — é só uma conversa, sem formulários. Vamos começar pela sua idade — quantos anos você tem?",
+        "new": "Olá! Sou o Horizon AI — estou aqui para ajudar a descobrir o perfil de risco de investimento certo para você. É só uma conversa, sem formulários. Vamos começar de forma simples: qual é o seu nome?",
+        "name_only": "Olá {name}! Sou o Horizon AI — estou aqui para ajudar a descobrir o perfil de risco de investimento certo para você. É só uma conversa, sem formulários. Vamos começar pela sua idade — quantos anos você tem?",
         "returning": "Bem-vindo(a) de volta, {name}! Da última vez você nos disse que {recap}. Ainda está tudo certo, ou algo mudou?",
     },
     "sw": {
-        "new": "Habari! Niko hapa kukusaidia kupata wasifu sahihi wa hatari ya uwekezaji kwako — ni mazungumzo tu, hakuna fomu. Tuanze kwa urahisi: jina lako ni nani?",
-        "name_only": "Habari {name}! Niko hapa kukusaidia kupata wasifu sahihi wa hatari ya uwekezaji kwako — ni mazungumzo tu, hakuna fomu. Tuanze na umri wako — una miaka mingapi?",
+        "new": "Habari! Mimi ni Horizon AI — niko hapa kukusaidia kupata wasifu sahihi wa hatari ya uwekezaji kwako. Ni mazungumzo tu, hakuna fomu. Tuanze kwa urahisi: jina lako ni nani?",
+        "name_only": "Habari {name}! Mimi ni Horizon AI — niko hapa kukusaidia kupata wasifu sahihi wa hatari ya uwekezaji kwako. Ni mazungumzo tu, hakuna fomu. Tuanze na umri wako — una miaka mingapi?",
         "returning": "Karibu tena, {name}! Mara ya mwisho ulituambia kuwa {recap}. Je, hayo bado ni sahihi, au kuna kilichobadilika?",
     },
     "zu": {
-        "new": "Sawubona! Ngilapha ukukusiza uthole iphrofayili yobungozi bokutshalwa kwemali efanele kuwe — kuwukuxoxa nje, akukho amafomu. Ake siqale ngokulula: ubani igama lakho?",
-        "name_only": "Sawubona {name}! Ngilapha ukukusiza uthole iphrofayili yobungozi bokutshalwa kwemali efanele kuwe — kuwukuxoxa nje, akukho amafomu. Ake siqale ngeminyaka yakho — uneminyaka emingaki?",
+        "new": "Sawubona! NginguHorizon AI — ngilapha ukukusiza uthole iphrofayili yobungozi bokutshalwa kwemali efanele kuwe. Kuwukuxoxa nje, akukho amafomu. Ake siqale ngokulula: ubani igama lakho?",
+        "name_only": "Sawubona {name}! NginguHorizon AI — ngilapha ukukusiza uthole iphrofayili yobungozi bokutshalwa kwemali efanele kuwe. Kuwukuxoxa nje, akukho amafomu. Ake siqale ngeminyaka yakho — uneminyaka emingaki?",
         "returning": "Siyakwamukela futhi, {name}! Ngesikhathi sokugcina wasitshela ukuthi {recap}. Konke lokho kusesekhona, noma kukhona okushintshile?",
     },
     "ig": {
-        "new": "Ndewo! Anọ m ebe a inyere gị aka ịchọpụta profaịlụ ihe ize ndụ itinye ego kwesịrị ekwesị maka gị — ọ bụ naanị mkparịta ụka, ọ nweghị fọm. Ka anyị malite nke dị mfe: gịnị bụ aha gị?",
-        "name_only": "Ndewo {name}! Anọ m ebe a inyere gị aka ịchọpụta profaịlụ ihe ize ndụ itinye ego kwesịrị ekwesị maka gị — ọ bụ naanị mkparịta ụka, ọ nweghị fọm. Ka anyị malite site na afọ gị — afọ ole ka ị dị?",
+        "new": "Ndewo! Abụ m Horizon AI — anọ m ebe a inyere gị aka ịchọpụta profaịlụ ihe ize ndụ itinye ego kwesịrị ekwesị maka gị. Ọ bụ naanị mkparịta ụka, ọ nweghị fọm. Ka anyị malite nke dị mfe: gịnị bụ aha gị?",
+        "name_only": "Ndewo {name}! Abụ m Horizon AI — anọ m ebe a inyere gị aka ịchọpụta profaịlụ ihe ize ndụ itinye ego kwesịrị ekwesị maka gị. Ọ bụ naanị mkparịta ụka, ọ nweghị fọm. Ka anyị malite site na afọ gị — afọ ole ka ị dị?",
         "returning": "Nnọọ ọzọ, {name}! Oge ikpeazụ ị gwara anyị na {recap}. Ihe niile ka dị mma, ka e nwere ihe gbanwere?",
     },
 }
@@ -261,7 +274,7 @@ def compute_intake_progress(extracted: dict) -> tuple[int, int]:
 # ---------------------------------------------------------------------
 # INTAKE phase
 # ---------------------------------------------------------------------
-_INTAKE_SYSTEM_PROMPT_BASE = """You are a financial intake assistant for a bank's investment \
+_INTAKE_SYSTEM_PROMPT_BASE = """You are Horizon AI, a financial intake assistant for a bank's investment \
 risk-profiling tool. There is no structured form anymore — you are the ONLY way the \
 client provides their information, so you need to gather everything below through \
 natural conversation, one question at a time, never a wall of questions.
@@ -632,7 +645,7 @@ def build_post_results_system_prompt(finalized_result: dict, product_blurbs: lis
             + "\n\n".join(product_blurbs)
         )
 
-    return f"""You are a friendly financial assistant helping a client understand the \
+    return f"""You are Horizon AI, a friendly financial assistant helping a client understand the \
 investment risk matrix they've just been shown. Each matched PRODUCT comes with its own \
 recommended SPLIT across one or more portfolios (a client holds several portfolios inside \
 one product, not one portfolio per product):

@@ -63,6 +63,7 @@ export default function LandingPage({ onStart, language }) {
         </div>
 
         <h1 className="landing-headline">{t(language, "landing.headline")}</h1>
+        <p className="landing-slogan">{t(language, "landing.slogan")}</p>
         <p className="landing-subtext">{t(language, "landing.subtext")}</p>
 
         <form className="landing-search" onSubmit={handleSubmit}>

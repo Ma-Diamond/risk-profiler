@@ -18,7 +18,7 @@ export const LANGUAGES = [
 
 export const UI_STRINGS = {
   en: {
-    header: { product: "AI Financial Guide", chooseLanguage: "Language" },
+    header: { product: "Horizon AI", chooseLanguage: "Language" },
     nav: {
       home: "Home",
       profiles: "My Profiles",
@@ -38,7 +38,8 @@ export const UI_STRINGS = {
       requested: "Request received — an advisor will call you back shortly.",
     },
     landing: {
-      headline: "Hi! I'm your Standard Bank AI Financial Guide.",
+      headline: "Hi! I'm Horizon AI, your Standard Bank Financial Guide.",
+      slogan: "See what tomorrow could look like.",
       subtext: "Tell me what you're hoping to achieve, and I'll help you understand your options, in your language.",
       placeholder: "How can I help you today?",
       pills: { retirement: "Retirement", investments: "Investments", protection: "Protection", savings: "Savings" },
@@ -93,7 +94,7 @@ export const UI_STRINGS = {
     },
   },
   pt: {
-    header: { product: "Guia Financeiro de IA", chooseLanguage: "Idioma" },
+    header: { product: "Horizon AI", chooseLanguage: "Idioma" },
     nav: {
       home: "Início",
       profiles: "Meus Perfis",
@@ -113,7 +114,8 @@ export const UI_STRINGS = {
       requested: "Pedido recebido — um consultor irá ligar para si em breve.",
     },
     landing: {
-      headline: "Olá! Sou o seu Guia Financeiro de IA do Standard Bank.",
+      headline: "Olá! Sou o Horizon AI, o seu Guia Financeiro do Standard Bank.",
+      slogan: "Veja como pode ser o amanhã.",
       subtext: "Diga-me o que espera alcançar, e eu ajudo a entender as suas opções, no seu idioma.",
       placeholder: "Como posso ajudar hoje?",
       pills: { retirement: "Reforma", investments: "Investimentos", protection: "Proteção", savings: "Poupança" },
@@ -164,7 +166,7 @@ export const UI_STRINGS = {
     common: { back: "Voltar", close: "Fechar", loading: "Carregando…" },
   },
   sw: {
-    header: { product: "Mwongozo wa Kifedha wa AI", chooseLanguage: "Lugha" },
+    header: { product: "Horizon AI", chooseLanguage: "Lugha" },
     nav: {
       home: "Nyumbani",
       profiles: "Wasifu Wangu",
@@ -184,7 +186,8 @@ export const UI_STRINGS = {
       requested: "Ombi limepokelewa — mshauri atakupigia simu hivi karibuni.",
     },
     landing: {
-      headline: "Habari! Mimi ni Mwongozo wako wa Kifedha wa AI wa Standard Bank.",
+      headline: "Habari! Mimi ni Horizon AI, Mwongozo wako wa Kifedha wa Standard Bank.",
+      slogan: "Ona jinsi kesho inavyoweza kuwa.",
       subtext: "Niambie unachotaka kufikia, nami nitakusaidia kuelewa chaguo zako, kwa lugha yako.",
       placeholder: "Ninawezaje kukusaidia leo?",
       pills: { retirement: "Ustaafu", investments: "Uwekezaji", protection: "Ulinzi", savings: "Akiba" },
@@ -235,7 +238,7 @@ export const UI_STRINGS = {
     common: { back: "Rudi", close: "Funga", loading: "Inapakia…" },
   },
   zu: {
-    header: { product: "Umhlahlandlela Wezezimali we-AI", chooseLanguage: "Ulimi" },
+    header: { product: "Horizon AI", chooseLanguage: "Ulimi" },
     nav: {
       home: "Ekhaya",
       profiles: "Amaphrofayela Ami",
@@ -255,7 +258,8 @@ export const UI_STRINGS = {
       requested: "Isicelo sitholiwe — umeluleki uzokushayela maduze.",
     },
     landing: {
-      headline: "Sawubona! Ngingumhlahlandlela wakho we-AI wezezimali we-Standard Bank.",
+      headline: "Sawubona! NginguHorizon AI, umhlahlandlela wakho wezezimali we-Standard Bank.",
+      slogan: "Bona ukuthi ikusasa lingaba kanjani.",
       subtext: "Ngitshele ofuna ukukufeza, futhi ngizokusiza uqonde izinketho zakho, ngolimi lwakho.",
       placeholder: "Ngingakusiza kanjani namuhla?",
       pills: { retirement: "Umhlalaphansi", investments: "Ukutshala imali", protection: "Ukuvikela", savings: "Ukonga" },
@@ -306,7 +310,7 @@ export const UI_STRINGS = {
     common: { back: "Emuva", close: "Vala", loading: "Iyalayisha…" },
   },
   ig: {
-    header: { product: "Onye Ndụmọdụ Ego AI", chooseLanguage: "Asụsụ" },
+    header: { product: "Horizon AI", chooseLanguage: "Asụsụ" },
     nav: {
       home: "Ụlọ",
       profiles: "Profaịlụ M",
@@ -326,7 +330,8 @@ export const UI_STRINGS = {
       requested: "Anatala arịrịọ — onye ndụmọdụ ga-akpọghachi gị n'oge na-adịghị anya.",
     },
     landing: {
-      headline: "Ndewo! Abụ m Onye Ndụmọdụ Ego AI nke Standard Bank gị.",
+      headline: "Ndewo! Abụ m Horizon AI, Onye Ndụmọdụ Ego gị nke Standard Bank.",
+      slogan: "Hụ ka echi nwere ike ịdị.",
       subtext: "Gwa m ihe ị na-achọ imezu, m ga-enyere gị aka ịghọta nhọrọ gị, n'asụsụ gị.",
       placeholder: "Kedu ka m ga-esi nyere gị aka taa?",
       pills: { retirement: "Ezumike ọgụgụ", investments: "Itinye ego", protection: "Nchekwa", savings: "Ịchekwa ego" },
