@@ -374,6 +374,33 @@ class LinkedAccountOut(BaseModel):
     limit: float | None = None
 
 
+class NotificationOut(BaseModel):
+    """A proactive nudge about an EXISTING account, surfaced outside
+    any one chat session (unlike the post-results "nudge", which only
+    fires within an active session right after finalizing). Tapping
+    cta_message is meant to resume the chat tied to client_id and send
+    it as the client's own message, so the reply lands in the right
+    conversational context (that profile's matched products, bands,
+    etc.) rather than a generic one.
+
+    message/cta_message here are the English copy — kept for API
+    completeness/debugging, but the frontend builds the displayed and
+    sent text from `type` + product_name/portfolio_name against its
+    own translated templates, so the notification actually appears in
+    whatever language the client has selected rather than always
+    English."""
+
+    id: str
+    type: str
+    message: str
+    cta_label: str
+    cta_message: str
+    client_id: int
+    account_id: int | None = None
+    product_name: str | None = None
+    portfolio_name: str | None = None
+
+
 # ---------------------------------------------------------------------
 # Item -> dataclass helpers
 # ---------------------------------------------------------------------
@@ -1459,6 +1486,11 @@ def list_my_accounts(user_id: str = Depends(require_user_id)) -> list[AccountOut
     client_id) over time. The Accounts table only has a by-client GSI,
     so this is a full scan filtered client-side; fine at hackathon
     scale, would want a by-user GSI before this saw real traffic."""
+    mine = _load_raw_accounts_for_user(user_id)
+    return [_account_item_to_out(a) for a in mine]
+
+
+def _load_raw_accounts_for_user(user_id: str) -> list[dict]:
     items: list[dict] = []
     resp = db.ACCOUNTS.scan()
     items.extend(resp["Items"])
@@ -1467,7 +1499,7 @@ def list_my_accounts(user_id: str = Depends(require_user_id)) -> list[AccountOut
         items.extend(resp["Items"])
     mine = [a for a in items if a.get("user_id") == user_id]
     mine.sort(key=lambda a: a["created_at"], reverse=True)
-    return [_account_item_to_out(a) for a in mine]
+    return mine
 
 
 @app.get("/accounts/linked", response_model=list[LinkedAccountOut])
@@ -1478,6 +1510,122 @@ def list_linked_accounts(user_id: str = Depends(require_user_id)) -> list[Linked
     end-of-month surplus check."""
     accounts = _load_or_generate_linked_accounts(user_id)
     return [LinkedAccountOut(**a) for a in accounts]
+
+
+# ---------------------------------------------------------------------
+# Proactive account notifications
+#
+# Distinct from the post-results "nudge" (surplus check), which only
+# ever fires inside an active chat session right after finalizing.
+# These surface independently of any open session — on the accounts
+# page, from a header badge — whenever the client has existing
+# accounts worth revisiting. Two of the three checks below are driven
+# by real stored data (account age, income on file now vs. when the
+# account was opened); the third is explicitly a demo-only "worth a
+# look" prompt in the same spirit as the simulated linked accounts,
+# since there's no real "this portfolio is being discontinued" event
+# in this system to hook into.
+# ---------------------------------------------------------------------
+CHECKIN_AGE_DAYS = 14  # demo-scale threshold; phrased as "a while", not a false year count
+INCOME_INCREASE_THRESHOLD = 0.15  # 15%+ higher than what's on file for that account
+MAX_NOTIFICATIONS = 3
+
+
+def _generate_notifications(user_id: str) -> list[NotificationOut]:
+    accounts = _load_raw_accounts_for_user(user_id)
+    if not accounts:
+        return []
+
+    current_income = _load_saved_known_context(user_id).get("gross_monthly_income")
+    now = datetime.now(timezone.utc)
+    client_cache: dict[int, dict | None] = {}
+    notifications: list[NotificationOut] = []
+
+    for acc in accounts:
+        client_id = int(acc["client_id"])
+        if client_id not in client_cache:
+            client_cache[client_id] = db.CLIENTS.get_item(Key={"client_id": client_id}).get("Item")
+        client = client_cache[client_id]
+        if client is None:
+            continue
+
+        try:
+            created_at = datetime.fromisoformat(acc["created_at"])
+        except ValueError:
+            continue
+        age_days = (now - created_at).days
+
+        candidates: list[NotificationOut] = []
+
+        # 1. Check-in — real condition (account age)
+        if age_days >= CHECKIN_AGE_DAYS:
+            candidates.append(
+                NotificationOut(
+                    id=f"{acc['account_id']}-checkin",
+                    type="checkin",
+                    message=f"It's been a little while since you opened {acc['product_name']} — still happy with how it's going?",
+                    cta_label="Check in about this",
+                    cta_message=f"It's been a while since I opened {acc['product_name']} — can we review whether it's still the right fit for me?",
+                    client_id=client_id,
+                    account_id=int(acc["account_id"]),
+                    product_name=acc["product_name"],
+                    portfolio_name=acc.get("portfolio_name"),
+                )
+            )
+
+        # 2. Income increase — real condition (current known income vs.
+        # the income on file for the client record this account was
+        # opened against)
+        old_income = db.num(client["gross_monthly_income"]) if client.get("gross_monthly_income") is not None else None
+        if current_income and old_income and current_income > old_income * (1 + INCOME_INCREASE_THRESHOLD):
+            candidates.append(
+                NotificationOut(
+                    id=f"{acc['account_id']}-income",
+                    type="income_increase",
+                    message=f"Your income looks like it's grown since you set up {acc['product_name']} — want to see if increasing your monthly contribution makes sense?",
+                    cta_label="Explore increasing my contribution",
+                    cta_message=f"My income has increased since I set up {acc['product_name']} — what would happen if I increased my monthly contribution?",
+                    client_id=client_id,
+                    account_id=int(acc["account_id"]),
+                    product_name=acc["product_name"],
+                    portfolio_name=acc.get("portfolio_name"),
+                )
+            )
+
+        # 3. Simulated "worth a look" prompt — demo only, NOT a real
+        # discontinuation event. Deterministic per account (a hash of
+        # the account_id) so it's stable across page loads rather than
+        # flickering on and off, and only ever applies to roughly one
+        # in three accounts so it doesn't dominate the real ones.
+        seed = int(hashlib.sha256(str(acc["account_id"]).encode()).hexdigest(), 16)
+        if seed % 3 == 0:
+            candidates.append(
+                NotificationOut(
+                    id=f"{acc['account_id']}-portfolio-update",
+                    type="portfolio_update",
+                    message=f"There may be a lower-fee option available for {acc['portfolio_name']} within {acc['product_name']} — want to see how switching could look?",
+                    cta_label="See if switching helps",
+                    cta_message=f"Is there a lower-fee alternative to {acc['portfolio_name']} within {acc['product_name']} that I should consider?",
+                    client_id=client_id,
+                    account_id=int(acc["account_id"]),
+                    product_name=acc["product_name"],
+                    portfolio_name=acc.get("portfolio_name"),
+                )
+            )
+
+        if not candidates:
+            continue
+        # One notification per account at most — prefer a real-data-
+        # driven reason over the simulated one when both apply.
+        candidates.sort(key=lambda n: 0 if n.type != "portfolio_update" else 1)
+        notifications.append(candidates[0])
+
+    return notifications[:MAX_NOTIFICATIONS]
+
+
+@app.get("/notifications", response_model=list[NotificationOut])
+def get_notifications(user_id: str = Depends(require_user_id)) -> list[NotificationOut]:
+    return _generate_notifications(user_id)
 
 
 @app.get("/profiles", response_model=list[ProfileSummaryOut])

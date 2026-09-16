@@ -303,6 +303,23 @@ const ChatPanel = forwardRef(function ChatPanel(
       autoNudgeFiredRef.current = false;
     },
 
+    // Used by notification CTAs: resume a (possibly different)
+    // session AND immediately send a message into it, in one call —
+    // calling resumeSession then sendProgrammaticMessage separately
+    // would risk sendRaw still reading the OLD sessionId from its
+    // closure before React re-renders with the new one, since
+    // setSessionId doesn't take effect synchronously. Passing the
+    // session id straight into sendRaw sidesteps that entirely.
+    resumeSessionAndAsk: (newSessionId, newMessages, textToSend) => {
+      setSessionId(newSessionId);
+      setMessages(newMessages);
+      setPendingRiskWidget(null);
+      setError(null);
+      setIntakeProgress(null);
+      autoNudgeFiredRef.current = false;
+      sendRaw(textToSend, newSessionId);
+    },
+
     startFresh: () => {
       setSessionId(null);
       setMessages([]);

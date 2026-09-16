@@ -71,6 +71,21 @@ export const UI_STRINGS = {
       capacity: "Capacity",
       horizon: "Horizon",
       taxBracket: "Tax bracket",
+      note: 'Governed by the lowest of tolerance (your comfort with risk), capacity (what you can financially afford to risk), and horizon (how long until you need this money) — the dot on the ladder shows which one is constraining. Ask the chat "what if I invest more" to see how the numbers below change.',
+      bandLabels: {
+        1: "Very Cautious",
+        2: "Cautious",
+        3: "Balanced",
+        4: "Growth-Focused",
+        5: "Aggressive Growth",
+      },
+      bandExplanations: {
+        1: "We've matched you with the most capital-stable options available. Protecting what you already have matters more right now than chasing higher returns.",
+        2: "A gentle mix that limits how much you could lose, while still allowing some room to grow.",
+        3: "A balanced mix of growth and stability — comfortable with some ups and downs along the way in exchange for better long-term returns.",
+        4: "Tilted toward growth. You're comfortable with real short-term swings in your investment's value, in exchange for stronger long-term potential.",
+        5: "Full growth focus. You're comfortable with significant ups and downs along the way, in pursuit of the highest long-term potential.",
+      },
     },
     accounts: {
       title: "My accounts",
@@ -147,6 +162,21 @@ export const UI_STRINGS = {
       capacity: "Capacidade",
       horizon: "Horizonte",
       taxBracket: "Faixa de imposto",
+      note: 'Regido pelo menor entre tolerância (o seu conforto com o risco), capacidade (o que pode financeiramente arriscar) e horizonte (quanto tempo até precisar deste dinheiro) — o ponto na escada mostra qual está a limitar. Pergunte ao chat "e se eu investir mais" para ver como os números abaixo mudam.',
+      bandLabels: {
+        1: "Muito Cauteloso",
+        2: "Cauteloso",
+        3: "Equilibrado",
+        4: "Focado em Crescimento",
+        5: "Crescimento Agressivo",
+      },
+      bandExplanations: {
+        1: "Combinámo-lo com as opções mais estáveis em capital disponíveis. Proteger o que já tem importa mais agora do que perseguir retornos mais altos.",
+        2: "Uma combinação suave que limita quanto poderia perder, ao mesmo tempo que permite algum espaço para crescer.",
+        3: "Uma combinação equilibrada de crescimento e estabilidade — confortável com algumas subidas e descidas pelo caminho em troca de melhores retornos a longo prazo.",
+        4: "Inclinado para o crescimento. Você está confortável com oscilações reais de curto prazo no valor do seu investimento, em troca de um potencial mais forte a longo prazo.",
+        5: "Foco total no crescimento. Você está confortável com subidas e descidas significativas pelo caminho, em busca do maior potencial a longo prazo.",
+      },
     },
     accounts: {
       title: "Minhas contas",
@@ -219,6 +249,21 @@ export const UI_STRINGS = {
       capacity: "Uwezo",
       horizon: "Muda",
       taxBracket: "Kiwango cha kodi",
+      note: 'Inaongozwa na kiwango cha chini kati ya uvumilivu (starehe yako na hatari), uwezo (unachoweza kumudu kifedha kuhatarisha), na muda (ni muda gani hadi uhitaji pesa hii) — nukta kwenye ngazi inaonyesha ni ipi inayozuia. Uliza mazungumzo "itakuwaje nikiwekeza zaidi" kuona jinsi namba zilizo chini zinavyobadilika.',
+      bandLabels: {
+        1: "Mwangalifu Sana",
+        2: "Mwangalifu",
+        3: "Uwiano",
+        4: "Unaolenga Ukuaji",
+        5: "Ukuaji wa Nguvu",
+      },
+      bandExplanations: {
+        1: "Tumekulinganisha na chaguo zenye uthabiti mkubwa wa mtaji zinazopatikana. Kulinda ulicho nacho tayari ni muhimu zaidi sasa kuliko kufuatilia faida kubwa zaidi.",
+        2: "Mchanganyiko wa upole unaozuia kiasi unachoweza kupoteza, huku bado ukiruhusu nafasi ya kukua.",
+        3: "Mchanganyiko uliosawazishwa wa ukuaji na uthabiti — starehe na baadhi ya kupanda na kushuka njiani kwa kubadilishana na faida bora za muda mrefu.",
+        4: "Umeelekea kwenye ukuaji. Uko starehe na mabadiliko halisi ya muda mfupi katika thamani ya uwekezaji wako, kwa kubadilishana na uwezo bora wa muda mrefu.",
+        5: "Lengo kamili la ukuaji. Uko starehe na kupanda na kushuka kukubwa njiani, katika kutafuta uwezo mkubwa zaidi wa muda mrefu.",
+      },
     },
     accounts: {
       title: "Akaunti zangu",
@@ -291,6 +336,21 @@ export const UI_STRINGS = {
       capacity: "Amandla",
       horizon: "Isikhathi",
       taxBracket: "Izinga lentela",
+      note: 'Kulawulwa ubuncane phakathi kokubekezelela (ukukhululeka kwakho ngobungozi), amandla (lokho ongakwazi ukubeka engozini ngokwezimali), kanye nesikhathi (isikhathi esingakanani ngaphambi kokuba udinge le mali) — ichaphaza kuleli bhalansi likhombisa yiliphi elivimbelayo. Buza ingxoxo "kuzoba njani uma ngitshala kakhulu" ukuze ubone ukuthi izinombolo ezingezansi zishintsha kanjani.',
+      bandLabels: {
+        1: "Oqaphile Kakhulu",
+        2: "Oqaphile",
+        3: "Olinganisiwe",
+        4: "Ogxile Ekukhuleni",
+        5: "Ukukhula Okunamandla",
+      },
+      bandExplanations: {
+        1: "Sikuhlanganise nezinketho ezinokuzinza okukhulu kwemali okhona. Ukuvikela lokho osele unakho kubaluleke kakhulu manje kunokulandela inzuzo ephakeme.",
+        2: "Inhlanganisela emnene evimbela ukuthi kungakanani ongase ulahlekelwe kukho, kuyilapho kusavumela isikhala sokukhula.",
+        3: "Inhlanganisela elinganisiwe yokukhula nokuzinza — okhululekile ngokukhuphuka nokwehla okuthile endleleni ukuze uthole inzuzo engcono yesikhathi eside.",
+        4: "Kugobele ekukhuleni. Ukhululekile ngokuguquguquka kwangempela kwesikhathi esifushane enanini lokutshalwa kwakho kwemali, ukuze uthole amandla angcono esikhathi eside.",
+        5: "Ukugxila okugcwele ekukhuleni. Ukhululekile ngokukhuphuka nokwehla okukhulu endleleni, ufuna amandla aphezulu kakhulu esikhathi eside.",
+      },
     },
     accounts: {
       title: "Ama-akhawunti ami",
@@ -363,6 +423,21 @@ export const UI_STRINGS = {
       capacity: "Ike",
       horizon: "Oge",
       taxBracket: "Ọkwa ụtụ isi",
+      note: 'A na-achịkwa ya site n\'obere kacha nta n\'etiti ndidi (ka ahụ ị dị mma na ihe ize ndụ), ike (ihe ị nwere ike iji ego tinye n\'ihe ize ndụ), na oge (ogologo oge ị ga-achọ ego a) — ntụpọ dị na ubube ahụ na-egosi nke na-egbochi. Jụọ mkparịta ụka "gịnị ga-eme ma ọ bụrụ na m tinye ego karịa" iji hụ ka ọnụọgụ dị n\'okpuru si agbanwe.',
+      bandLabels: {
+        1: "Nlezịanya Nke Ukwu",
+        2: "Nlezịanya",
+        3: "Nguzoziga",
+        4: "Elekwasị Uto",
+        5: "Uto Ike Ike",
+      },
+      bandExplanations: {
+        1: "Anyị ejikọtala gị na nhọrọ kacha nwee nchekwa ego dị. Ichekwa ihe ị nweburu na-aba uru karịa ịchụsọ ọghọ ndị ka elu ugbu a.",
+        2: "Ngwakọta dị nwayọ na-egbochi ego ole ị nwere ike ịtụfu, ka ọ na-enyekwa ohere ịto.",
+        3: "Ngwakọta ziga zi nke uto na nguzozi — na-anụ ahụ mma na mgbago na mgbada ụfọdụ n'ụzọ maka ọghọ ka mma n'ogologo oge.",
+        4: "Gbadaruo n'uto. Ọ na-anụ ahụ mma na mgbanwe ezigbo nke oge dị nkenke n'ọnụ ahịa itinye ego gị, maka ike ka ike n'ogologo oge.",
+        5: "Nlebara uto zuru oke. Ọ na-anụ ahụ mma na mgbago na mgbada dị ukwuu n'ụzọ, na-achọ ike kachasị elu n'ogologo oge.",
+      },
     },
     accounts: {
       title: "Akaụntụ m",
@@ -401,4 +476,121 @@ export function t(language, path) {
     return fallback ?? path;
   }
   return node;
+}
+
+// Proactive account-notification copy — kept separate from UI_STRINGS
+// since these are fill-in-the-blank templates ({product}/{portfolio})
+// rather than plain strings. The backend only sends English copy plus
+// the structured product/portfolio names (see NotificationOut) so
+// this builds the actually-displayed text from those names against a
+// translated template, the same fix used for the risk band labels —
+// otherwise notifications would silently stay English regardless of
+// the selected language.
+export const NOTIFICATION_TEMPLATES = {
+  en: {
+    title: "Notifications",
+    empty: "Nothing new right now.",
+    checkin: {
+      message: "It's been a little while since you opened {product} — still happy with how it's going?",
+      ctaLabel: "Check in about this",
+      ctaMessage: "It's been a while since I opened {product} — can we review whether it's still the right fit for me?",
+    },
+    income_increase: {
+      message: "Your income looks like it's grown since you set up {product} — want to see if increasing your monthly contribution makes sense?",
+      ctaLabel: "Explore increasing my contribution",
+      ctaMessage: "My income has increased since I set up {product} — what would happen if I increased my monthly contribution?",
+    },
+    portfolio_update: {
+      message: "There may be a lower-fee option available for {portfolio} within {product} — want to see how switching could look?",
+      ctaLabel: "See if switching helps",
+      ctaMessage: "Is there a lower-fee alternative to {portfolio} within {product} that I should consider?",
+    },
+  },
+  pt: {
+    title: "Notificações",
+    empty: "Nada de novo por agora.",
+    checkin: {
+      message: "Já faz um tempo desde que abriu {product} — ainda está satisfeito com o andamento?",
+      ctaLabel: "Fazer um ponto de situação",
+      ctaMessage: "Já faz um tempo desde que abri {product} — podemos rever se ainda é a melhor opção para mim?",
+    },
+    income_increase: {
+      message: "O seu rendimento parece ter aumentado desde que configurou {product} — quer ver se faz sentido aumentar a sua contribuição mensal?",
+      ctaLabel: "Explorar aumentar a minha contribuição",
+      ctaMessage: "O meu rendimento aumentou desde que configurei {product} — o que aconteceria se aumentasse a minha contribuição mensal?",
+    },
+    portfolio_update: {
+      message: "Pode haver uma opção com taxa mais baixa disponível para {portfolio} dentro de {product} — quer ver como seria mudar?",
+      ctaLabel: "Ver se mudar ajuda",
+      ctaMessage: "Existe uma alternativa com taxa mais baixa a {portfolio} dentro de {product} que eu deva considerar?",
+    },
+  },
+  sw: {
+    title: "Arifa",
+    empty: "Hakuna kipya kwa sasa.",
+    checkin: {
+      message: "Imepita muda tangu ufungue {product} — bado uko radhi na jinsi inavyoenda?",
+      ctaLabel: "Angalia kuhusu hili",
+      ctaMessage: "Imepita muda tangu nifungue {product} — tunaweza kupitia kama bado ni sahihi kwangu?",
+    },
+    income_increase: {
+      message: "Kipato chako kinaonekana kimeongezeka tangu uanzishe {product} — unataka kuona kama kuongeza mchango wako wa kila mwezi kuna maana?",
+      ctaLabel: "Chunguza kuongeza mchango wangu",
+      ctaMessage: "Kipato changu kimeongezeka tangu nianzishe {product} — nini kingetokea nikiongeza mchango wangu wa kila mwezi?",
+    },
+    portfolio_update: {
+      message: "Kunaweza kuwa na chaguo la ada ya chini kwa {portfolio} ndani ya {product} — unataka kuona jinsi kubadilisha kunavyoweza kuwa?",
+      ctaLabel: "Angalia kama kubadilisha kutasaidia",
+      ctaMessage: "Je, kuna mbadala wa ada ya chini kwa {portfolio} ndani ya {product} ambao ninapaswa kuzingatia?",
+    },
+  },
+  zu: {
+    title: "Izaziso",
+    empty: "Akukho okusha okwamanje.",
+    checkin: {
+      message: "Sekuyisikhathi kusukela wavula i-{product} — usajabulile ngendlela ekuhamba ngayo?",
+      ctaLabel: "Hlola ngalokhu",
+      ctaMessage: "Sekuyisikhathi kusukela ngavula i-{product} — singahlola ukuthi isafanele yini kimi?",
+    },
+    income_increase: {
+      message: "Imali engenayo ibonakala ikhulile kusukela wasungula i-{product} — ufuna ukubona ukuthi kunengqondo yini ukwandisa umnikelo wakho wanyanga zonke?",
+      ctaLabel: "Hlola ukwandisa umnikelo wami",
+      ctaMessage: "Imali engenayo yami ikhulile kusukela ngasungula i-{product} — kungenzekani uma ngandisa umnikelo wami wanyanga zonke?",
+    },
+    portfolio_update: {
+      message: "Kungaba khona inketho enenkokhelo ephansi ye-{portfolio} ngaphakathi kwe-{product} — ufuna ukubona ukuthi ukushintsha kungaba njani?",
+      ctaLabel: "Bona ukuthi ukushintsha kuyasiza",
+      ctaMessage: "Ingabe kukhona enye inketho enenkokhelo ephansi ku-{portfolio} ngaphakathi kwe-{product} okufanele ngiyicabangele?",
+    },
+  },
+  ig: {
+    title: "Ọkwa",
+    empty: "Enweghị ihe ọhụrụ ugbu a.",
+    checkin: {
+      message: "Ọ marula oge site mgbe i meghere {product} — ka ọ na-atọ gị ụtọ otu ọ na-aga?",
+      ctaLabel: "Lelee gburugburu nke a",
+      ctaMessage: "Ọ marula oge site mgbe m meghere {product} — anyị nwere ike ilele ma ọ ka dabara nma maka m?",
+    },
+    income_increase: {
+      message: "Ego ọnụego gị yiri ka o toworo site mgbe i hiwere {product} — ị chọrọ ịhụ ma ọ ga-aba uru ịbawanye onyinye gị kwa ọnwa?",
+      ctaLabel: "Nyochaa ịbawanye onyinye m",
+      ctaMessage: "Ego ọnụego m abawanyela site mgbe m hiwere {product} — gịnị ga-eme ma ọ bụrụ na m bawanye onyinye m kwa ọnwa?",
+    },
+    portfolio_update: {
+      message: "Enwere ike inwe nhọrọ ụgwọ ọrụ dị ala maka {portfolio} n'ime {product} — ị chọrọ ịhụ ka ịgbanwe nwere ike ịdị?",
+      ctaLabel: "Hụ ma ịgbanwe ga-enyere aka",
+      ctaMessage: "O nwere ihe ọzọ dị ala n'ụgwọ ọrụ maka {portfolio} n'ime {product} m kwesịrị ịtụle?",
+    },
+  },
+};
+
+export function formatNotification(language, notif) {
+  const templates = NOTIFICATION_TEMPLATES[language] || NOTIFICATION_TEMPLATES.en;
+  const tpl = templates[notif.type] || NOTIFICATION_TEMPLATES.en[notif.type];
+  if (!tpl) {
+    return { message: notif.message, ctaLabel: notif.cta_label, ctaMessage: notif.cta_message };
+  }
+  const fill = (s) =>
+    s.replace("{product}", notif.product_name || "").replace("{portfolio}", notif.portfolio_name || "");
+  return { message: fill(tpl.message), ctaLabel: tpl.ctaLabel, ctaMessage: fill(tpl.ctaMessage) };
 }

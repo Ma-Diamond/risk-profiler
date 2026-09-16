@@ -11,6 +11,7 @@ import NavMenu from "./NavMenu";
 import ShieldMark from "./ShieldMark";
 import AdvisorButton from "./AdvisorButton";
 import LanguagePicker from "./LanguagePicker";
+import NotificationBell from "./NotificationBell";
 import { t } from "./i18n";
 import "./tokens.css";
 import "./global.css";
@@ -180,6 +181,39 @@ export default function App() {
     }
   };
 
+  // A notification's CTA is tied to a specific client_id (the profile
+  // that account was opened against) — resume THAT profile's chat
+  // session specifically, not whatever's currently open, then send the
+  // suggested message straight into it so the reply lands with the
+  // right context (that profile's matched products, bands, etc.).
+  const handleAskAboutNotification = async (clientId, ctaMessage) => {
+    try {
+      const headers = { Authorization: `Bearer ${authToken}` };
+      const profileRes = await fetch(`${API_BASE}/profiles/${clientId}`, { headers });
+      if (!profileRes.ok) {
+        const detail = await profileRes.json().catch(() => ({}));
+        throw new Error(detail.detail || `Couldn't load that profile (${profileRes.status})`);
+      }
+      const profileData = await profileRes.json();
+
+      const historyRes = await fetch(
+        `${API_BASE}/chat/sessions/${profileData.chat_session_id}/history`,
+        { headers }
+      );
+      const history = historyRes.ok ? await historyRes.json() : [];
+
+      setResult(profileData.profile_result);
+      setRecalculatedProducts(null);
+      setRecalculatedNote(null);
+      setAccounts(profileData.accounts || []);
+      setView("chat");
+      chatRef.current?.resumeSessionAndAsk(profileData.chat_session_id, history, ctaMessage);
+    } catch (e) {
+      console.error("handleAskAboutNotification failed:", e);
+      alert(`Couldn't open that conversation: ${e.message}`);
+    }
+  };
+
   // The landing page is now the entry point for starting a fresh
   // conversation — it collects the chosen language and (optionally) an
   // opening message (typed in the search bar, or a suggestion pill)
@@ -213,6 +247,7 @@ export default function App() {
         <div className="app-header__right">
           <span className="app-header__product">{t(language, "header.product")}</span>
           <LanguagePicker language={language} onChange={handleLanguageChange} />
+          <NotificationBell authToken={authToken} language={language} onAsk={handleAskAboutNotification} />
           <AdvisorButton language={language} />
           <NavMenu currentUser={currentUser} onNavigate={setView} onLogout={handleLogout} language={language} />
         </div>
