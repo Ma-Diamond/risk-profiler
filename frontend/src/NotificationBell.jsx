@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatNotification, NOTIFICATION_TEMPLATES } from "./i18n";
+import { BellIcon } from "./Icons";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -35,7 +36,7 @@ export default function NotificationBell({ authToken, language, onAsk }) {
         onClick={() => setOpen((o) => !o)}
         aria-label={copyDict.title}
       >
-        <span className="notification-bell__icon">🔔</span>
+        <BellIcon size={17} />
         {notifications.length > 0 && <span className="notification-bell__badge">{notifications.length}</span>}
       </button>
 

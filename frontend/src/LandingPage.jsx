@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { t } from "./i18n";
 import ShieldMark from "./ShieldMark";
+import { MicIcon, StopIcon, SendIcon } from "./Icons";
 
 const SpeechRecognitionAPI =
   typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
@@ -82,11 +83,11 @@ export default function LandingPage({ onStart, language }) {
               aria-label={listening ? "Listening" : "Speak instead"}
               title={listening ? "Listening…" : "Speak instead"}
             >
-              {listening ? "🔴" : "🎙️"}
+              {listening ? <StopIcon size={16} /> : <MicIcon size={17} />}
             </button>
           )}
           <button type="submit" className="landing-search__submit" aria-label="Send">
-            →
+            <SendIcon size={18} />
           </button>
         </form>
 

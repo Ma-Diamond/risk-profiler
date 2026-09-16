@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import RiskRatingWidget from "./RiskRatingWidget";
 import { t } from "./i18n";
+import { MicIcon, StopIcon, PaperclipIcon } from "./Icons";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -485,7 +486,7 @@ const ChatPanel = forwardRef(function ChatPanel(
               disabled={!sessionId || sending}
               title="Upload bank statement (PDF)"
             >
-              📎
+              <PaperclipIcon size={17} />
             </button>
             <input
               ref={fileInputRef}
@@ -507,7 +508,7 @@ const ChatPanel = forwardRef(function ChatPanel(
             disabled={!sessionId || sending}
             title={voiceMode ? "End voice conversation" : "Start voice conversation"}
           >
-            {voiceMode ? "🔴" : "🎙️"}
+            {voiceMode ? <StopIcon size={16} /> : <MicIcon size={17} />}
           </button>
         )}
         <textarea

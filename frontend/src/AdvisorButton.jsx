@@ -2,6 +2,7 @@ import { useState } from "react";
 import Portal from "./Portal";
 import Toast from "./Toast";
 import { t } from "./i18n";
+import { ChatBubbleIcon, PhoneIcon, PhoneCallbackIcon } from "./Icons";
 
 // Placeholder number — swap for the real advisor line when available.
 const ADVISOR_NUMBER = "0800 123 456";
@@ -19,7 +20,7 @@ export default function AdvisorButton({ language }) {
   return (
     <div className="advisor-button">
       <button type="button" className="advisor-button__trigger" onClick={() => setOpen((o) => !o)}>
-        <span className="advisor-button__icon">💬</span>
+        <ChatBubbleIcon size={16} />
         <span className="advisor-button__label">{t(language, "advisor.trigger")}</span>
       </button>
 
@@ -31,7 +32,7 @@ export default function AdvisorButton({ language }) {
               <p className="step-subtitle">{t(language, "advisor.subtitle")}</p>
 
               <a href={`tel:${ADVISOR_TEL}`} className="advisor-option" onClick={() => setOpen(false)}>
-                <span className="advisor-option__icon">📞</span>
+                <span className="advisor-option__icon"><PhoneIcon size={20} /></span>
                 <div className="advisor-option__text">
                   <strong>{t(language, "advisor.call")}</strong>
                   <span>{ADVISOR_NUMBER}</span>
@@ -39,7 +40,7 @@ export default function AdvisorButton({ language }) {
               </a>
 
               <button type="button" className="advisor-option" onClick={requestCallback}>
-                <span className="advisor-option__icon">📲</span>
+                <span className="advisor-option__icon"><PhoneCallbackIcon size={20} /></span>
                 <div className="advisor-option__text">
                   <strong>{t(language, "advisor.callback")}</strong>
                   <span>{t(language, "advisor.callbackSub")}</span>

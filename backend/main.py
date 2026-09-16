@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 import re
 import threading
 import uuid
@@ -1519,15 +1520,23 @@ def list_linked_accounts(user_id: str = Depends(require_user_id)) -> list[Linked
 # ever fires inside an active chat session right after finalizing.
 # These surface independently of any open session — on the accounts
 # page, from a header badge — whenever the client has existing
-# accounts worth revisiting. Two of the three checks below are driven
-# by real stored data (account age, income on file now vs. when the
-# account was opened); the third is explicitly a demo-only "worth a
-# look" prompt in the same spirit as the simulated linked accounts,
-# since there's no real "this portfolio is being discontinued" event
-# in this system to hook into.
+# accounts worth revisiting.
+#
+# Deliberately randomized on every call rather than deterministic: a
+# demo/presentation needs to be able to show off the variety of
+# notification types without waiting weeks for an account to age, or
+# hand-editing timestamps in DynamoDB. Real signals (account age,
+# actual income growth vs. what's on file) still bias the odds — an
+# account that's genuinely old, or a client whose income genuinely
+# grew, is noticeably more likely to surface that notification than
+# one where the condition doesn't hold — but nothing is a hard
+# on/off gate anymore. The "worth a look" prompt was always demo-only
+# (no real "portfolio discontinued" event exists in this system) and
+# stays that way. Every message still uses the account's real
+# product/portfolio names, so the content itself remains grounded.
 # ---------------------------------------------------------------------
-CHECKIN_AGE_DAYS = 14  # demo-scale threshold; phrased as "a while", not a false year count
-INCOME_INCREASE_THRESHOLD = 0.15  # 15%+ higher than what's on file for that account
+CHECKIN_AGE_DAYS = 14  # still used to bias the odds, not as a hard cutoff
+INCOME_INCREASE_THRESHOLD = 0.15  # still used to bias the odds, not as a hard cutoff
 MAX_NOTIFICATIONS = 3
 
 
@@ -1557,8 +1566,11 @@ def _generate_notifications(user_id: str) -> list[NotificationOut]:
 
         candidates: list[NotificationOut] = []
 
-        # 1. Check-in — real condition (account age)
-        if age_days >= CHECKIN_AGE_DAYS:
+        # 1. Check-in — genuinely old accounts are quite likely to show
+        # this; newer ones still have a smaller chance, so a demo can
+        # see this type without waiting for a real account to age.
+        checkin_chance = 0.7 if age_days >= CHECKIN_AGE_DAYS else 0.25
+        if random.random() < checkin_chance:
             candidates.append(
                 NotificationOut(
                     id=f"{acc['account_id']}-checkin",
@@ -1573,11 +1585,15 @@ def _generate_notifications(user_id: str) -> list[NotificationOut]:
                 )
             )
 
-        # 2. Income increase — real condition (current known income vs.
+        # 2. Income increase — a real increase (current known income vs.
         # the income on file for the client record this account was
-        # opened against)
+        # opened against) makes this likely; otherwise a smaller chance.
         old_income = db.num(client["gross_monthly_income"]) if client.get("gross_monthly_income") is not None else None
-        if current_income and old_income and current_income > old_income * (1 + INCOME_INCREASE_THRESHOLD):
+        real_income_increase = bool(
+            current_income and old_income and current_income > old_income * (1 + INCOME_INCREASE_THRESHOLD)
+        )
+        income_chance = 0.75 if real_income_increase else 0.2
+        if random.random() < income_chance:
             candidates.append(
                 NotificationOut(
                     id=f"{acc['account_id']}-income",
@@ -1593,12 +1609,8 @@ def _generate_notifications(user_id: str) -> list[NotificationOut]:
             )
 
         # 3. Simulated "worth a look" prompt — demo only, NOT a real
-        # discontinuation event. Deterministic per account (a hash of
-        # the account_id) so it's stable across page loads rather than
-        # flickering on and off, and only ever applies to roughly one
-        # in three accounts so it doesn't dominate the real ones.
-        seed = int(hashlib.sha256(str(acc["account_id"]).encode()).hexdigest(), 16)
-        if seed % 3 == 0:
+        # discontinuation event; a flat moderate chance every time.
+        if random.random() < 0.35:
             candidates.append(
                 NotificationOut(
                     id=f"{acc['account_id']}-portfolio-update",
@@ -1615,11 +1627,12 @@ def _generate_notifications(user_id: str) -> list[NotificationOut]:
 
         if not candidates:
             continue
-        # One notification per account at most — prefer a real-data-
-        # driven reason over the simulated one when both apply.
-        candidates.sort(key=lambda n: 0 if n.type != "portfolio_update" else 1)
-        notifications.append(candidates[0])
+        # One notification per account at most — pick randomly among
+        # whichever types passed their chance this time, rather than a
+        # fixed priority order, so which one shows also varies.
+        notifications.append(random.choice(candidates))
 
+    random.shuffle(notifications)
     return notifications[:MAX_NOTIFICATIONS]
 
 
