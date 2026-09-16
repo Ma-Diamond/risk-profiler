@@ -423,7 +423,14 @@
   min-height: 0;
 }
 
-.chat-bubble { max-width: 85%; padding: 11px 15px; border-radius: 16px; font-size: 14px; line-height: 1.45; }
+.chat-bubble {
+  max-width: 85%;
+  padding: 11px 15px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
 
 .chat-bubble--assistant {
   align-self: flex-start;
@@ -507,6 +514,7 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
   flex-shrink: 0;
+  min-height: 54px;
 }
 
 .chat-panel__input {
@@ -515,10 +523,13 @@
   background: none;
   padding: 9px 4px;
   resize: none;
+  min-height: 38px;
   max-height: 140px;
   overflow-y: auto;
   line-height: 1.4;
   font-family: var(--font-body);
+  font-size: 14px;
+  box-sizing: border-box;
 }
 
 .chat-panel__input:focus { border: none; }

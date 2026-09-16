@@ -59,7 +59,6 @@ export default function SummaryModal({ summary, onConfirm, onClose }) {
           {summary.tolerance_questionnaire && (
             <Row label="Risk ratings" value={summary.tolerance_questionnaire.join(", ")} />
           )}
-          {summary.tax_bracket && <Row label="Tax bracket" value={summary.tax_bracket} />}
           {summary.notes && <Row label="Notes" value={summary.notes} />}
         </div>
 

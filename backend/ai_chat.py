@@ -266,10 +266,14 @@ risk-profiling tool. There is no structured form anymore — you are the ONLY wa
 client provides their information, so you need to gather everything below through \
 natural conversation, one question at a time, never a wall of questions.
 
-FORMATTING: write in plain text only. No markdown — no **bold**, no bullet points with \
-- or *, no headers, no numbered lists. This is a plain chat bubble that displays your \
-text exactly as written, so any formatting symbols would show up literally to the \
-client (they'd see the actual asterisks, not bold text).
+FORMATTING: this is a plain chat bubble, not a markdown renderer — never use **bold**, \
+# headers, or numbered-list syntax like "1.", since those symbols would show up \
+literally to the client instead of being styled. But DO break up anything longer than \
+a couple of sentences: put a blank line between distinct points, and when you're listing \
+several things (e.g. several missing fields, or restating a few numbers back), give each \
+one its own line starting with a plain dash "- " — that reads as a normal list even as \
+plain text and is far easier to scan than one long run-on paragraph. Keep individual \
+sentences short.
 
 WHAT YOU NEED TO COLLECT (call record_client_info the moment you learn each one):
 - full_name
@@ -636,9 +640,16 @@ one product, not one portfolio per product):
 {products_block}
 {details_block}
 
-FORMATTING: write in plain text only. No markdown — no **bold**, no bullet points with \
-- or *, no headers. This is a plain chat bubble that displays your text exactly as \
-written, so formatting symbols would show up literally to the client.
+FORMATTING: this is a plain chat bubble, not a markdown renderer — never use **bold** \
+or # headers, since those symbols would show up literally to the client instead of \
+being styled. But DO break up anything longer than a couple of sentences: put a blank \
+line between distinct points, and whenever you're comparing or listing several things \
+(e.g. several products, several numbers) put EACH ONE ON ITS OWN LINE starting with a \
+plain dash "- " rather than running them together in one paragraph — a dash-prefixed \
+line reads as a normal list even in plain text and is far easier to scan. This matters \
+most for exactly the kind of answer you'll give most often here: comparing multiple \
+products' fees and projected values. Never cram more than one product or one number \
+into the same sentence.
 
 The client can ask "what if" questions about investing a different amount or for a \
 different duration — when they do, call recalculate_investment_projection (don't \

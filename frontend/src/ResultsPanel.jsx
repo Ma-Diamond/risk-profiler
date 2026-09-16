@@ -200,15 +200,6 @@ export default function ResultsPanel({
                 <span className="field-label">{t(language, "results.horizon")}</span>
                 <span className="mono">{result.horizon_band}</span>
               </div>
-              {result.tax_bracket && (
-                <div>
-                  <span className="field-label">{t(language, "results.taxBracket")}</span>
-                  <span className="mono">
-                    {result.tax_bracket}
-                    {!result.tax_bracket_estimated && " (as provided)"}
-                  </span>
-                </div>
-              )}
             </div>
             <p className="results-hero__note">
               Governed by the lowest of tolerance (your comfort with risk), capacity (what

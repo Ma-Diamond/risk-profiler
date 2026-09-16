@@ -342,9 +342,17 @@ const ChatPanel = forwardRef(function ChatPanel(
           });
           const data = await res.json();
           setSessionId(data.session_id);
-          setMessages([{ role: "assistant", text: data.reply }]);
           if (text && text.trim()) {
+            // The backend already generated and stored a canned opening
+            // (e.g. "Hi! What's your name?") for its own context, but
+            // showing it as a separate bubble before the person's own
+            // first message reads as redundant — "bot says hi, then I
+            // say hi" — and buries what they actually typed. Skip
+            // straight to sending their message; the reply that comes
+            // back becomes the first assistant bubble shown.
             sendRaw(text.trim(), data.session_id);
+          } else {
+            setMessages([{ role: "assistant", text: data.reply }]);
           }
         } catch {
           setError("Couldn't start the conversation — check the API is running.");
