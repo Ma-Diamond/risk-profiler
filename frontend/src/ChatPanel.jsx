@@ -140,11 +140,38 @@ const ChatPanel = forwardRef(function ChatPanel(
     recognitionRef.current = null;
   };
 
+  // Browsers block audio.play() calls that don't happen inside a
+  // direct user-gesture handler (a click) — by the time a TTS reply
+  // comes back, it's arriving from an async fetch chain that started
+  // from speech recognition ending, which no longer counts as a
+  // direct gesture as far as autoplay policy is concerned. Playing a
+  // silent clip synchronously right here, inside the actual button
+  // click, unlocks this SAME <audio> element for the rest of the
+  // session so later programmatic play() calls (from speakText) are
+  // allowed.
+  const unlockAudioPlayback = () => {
+    const el = getAudioEl();
+    el.src =
+      "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+    el.play().catch(() => {
+      // If even this is blocked, speakText's own play() will fail
+      // too and surface a clear message rather than failing silently.
+    });
+  };
+
+  const getAudioEl = () => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+    return audioRef.current;
+  };
+
   const toggleVoiceMode = () => {
     setVoiceMode((v) => {
       const next = !v;
       voiceModeRef.current = next;
       if (next) {
+        unlockAudioPlayback();
         startListening();
       } else {
         stopListening();
@@ -157,7 +184,6 @@ const ChatPanel = forwardRef(function ChatPanel(
   const speakText = async (text) => {
     if (!voiceModeRef.current || !text) return;
     try {
-      audioRef.current?.pause();
       const res = await fetch(`${API_BASE}/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,26 +192,34 @@ const ChatPanel = forwardRef(function ChatPanel(
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
         setError(`Voice output failed: ${detail.detail || res.status}`);
+        if (voiceModeRef.current) startListening();
         return;
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => {
+      const el = getAudioEl();
+      el.onended = () => {
         URL.revokeObjectURL(url);
         // Continue the voice conversation: listen again once the
         // reply has finished playing, unless voice mode was turned
         // off while it was speaking.
         if (voiceModeRef.current) startListening();
       };
-      audioRef.current = audio;
+      el.src = url;
       try {
-        await audio.play();
+        await el.play();
       } catch (playErr) {
-        setError(`Voice output couldn't play: ${playErr.message}`);
+        URL.revokeObjectURL(url);
+        setError(
+          "Your browser blocked voice playback — tap the mic button again to restart the voice conversation (the text reply is still shown above)."
+        );
+        // Keep the conversation going even without audio — the reply
+        // text is already in the chat, so listening again still works.
+        if (voiceModeRef.current) startListening();
       }
     } catch (e) {
       setError(`Voice output failed: ${e.message}`);
+      if (voiceModeRef.current) startListening();
     }
   };
 
