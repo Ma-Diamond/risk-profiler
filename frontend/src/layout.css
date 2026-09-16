@@ -1493,6 +1493,12 @@
     font-size: 20px;
   }
 
+  .landing-search__mic {
+    width: 46px;
+    height: 46px;
+    font-size: 18px;
+  }
+
   .landing-pill {
     font-size: 14.5px;
     padding: 10px 20px;
@@ -1539,6 +1545,26 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.landing-search__mic {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.landing-search__mic--active {
+  border-color: #B3261E;
+  color: #B3261E;
+  animation: mic-pulse 1.1s infinite;
 }
 
 .landing-pills {
