@@ -2,6 +2,7 @@ import { useState } from "react";
 import RiskLadder from "./RiskLadder";
 import Toast from "./Toast";
 import InvestmentApplicationModal from "./InvestmentApplicationModal";
+import { t } from "./i18n";
 
 function formatRand(value) {
   return `R${Math.round(value).toLocaleString()}`;
@@ -9,7 +10,7 @@ function formatRand(value) {
 
 const INITIAL_VISIBLE_PRODUCTS = 3;
 
-function ProductCard({ product, isTop, existingAccount, onInvest, style }) {
+function ProductCard({ product, isTop, existingAccount, onInvest, style, language }) {
   return (
     <div
       className={`portfolio-card card card--stagger-in ${product.is_top_pick ? "product-card--top-pick" : ""}`}
@@ -58,7 +59,7 @@ function ProductCard({ product, isTop, existingAccount, onInvest, style }) {
           weighted toward the best-fit portfolio with smaller shares for
           diversification. */}
       <div className="portfolio-split">
-        <p className="portfolio-split__title">Recommended split across portfolios</p>
+        <p className="portfolio-split__title">{t(language, "results.recommendedSplit")}</p>
         {product.recommended_portfolios.map((rp) => (
           <div key={rp.portfolio_id} className="portfolio-split__row">
             <div className="portfolio-split__bar-wrap">
@@ -83,11 +84,11 @@ function ProductCard({ product, isTop, existingAccount, onInvest, style }) {
       <div className="product-card__footer">
         {existingAccount ? (
           <span className={`pill pill--${existingAccount.status}`}>
-            {existingAccount.status === "pending" ? "Pending review" : existingAccount.status}
+            {existingAccount.status === "pending" ? t(language, "accounts.pending") : existingAccount.status}
           </span>
         ) : (
           <button className="btn btn-invest" onClick={onInvest}>
-            Invest Now
+            {t(language, "results.investNow")}
           </button>
         )}
       </div>
@@ -124,6 +125,7 @@ export default function ResultsPanel({
   authToken,
   savedProfile,
   onAccountOpened,
+  language,
 }) {
   const [toastMessage, setToastMessage] = useState(null);
   const [applicationTarget, setApplicationTarget] = useState(null);
@@ -163,8 +165,12 @@ export default function ResultsPanel({
   return (
     <div className="step-content step-content--enter">
       <header className="step-header">
-        <h2>Your risk matrix</h2>
-        {result.goals_detail && <p className="step-subtitle">Goals: {result.goals_detail}</p>}
+        <h2>{t(language, "results.title")}</h2>
+        {result.goals_detail && (
+          <p className="step-subtitle">
+            {t(language, "results.goals")}: {result.goals_detail}
+          </p>
+        )}
       </header>
 
       <div className="results-layout">
@@ -179,24 +185,24 @@ export default function ResultsPanel({
             <p className="results-hero__explanation">{result.governed_risk_band_explanation}</p>
             <div className="results-hero__breakdown">
               <div>
-                <span className="field-label">Overall band</span>
+                <span className="field-label">{t(language, "results.overallBand")}</span>
                 <span className="mono">{result.governed_risk_band} / 5</span>
               </div>
               <div>
-                <span className="field-label">Tolerance</span>
+                <span className="field-label">{t(language, "results.tolerance")}</span>
                 <span className="mono">{result.tolerance_band}</span>
               </div>
               <div>
-                <span className="field-label">Capacity</span>
+                <span className="field-label">{t(language, "results.capacity")}</span>
                 <span className="mono">{result.capacity_band}</span>
               </div>
               <div>
-                <span className="field-label">Horizon</span>
+                <span className="field-label">{t(language, "results.horizon")}</span>
                 <span className="mono">{result.horizon_band}</span>
               </div>
               {result.tax_bracket && (
                 <div>
-                  <span className="field-label">Tax bracket</span>
+                  <span className="field-label">{t(language, "results.taxBracket")}</span>
                   <span className="mono">
                     {result.tax_bracket}
                     {!result.tax_bracket_estimated && " (as provided)"}
@@ -222,14 +228,14 @@ export default function ResultsPanel({
                 className={`preview-banner__tab ${showingPreview ? "preview-banner__tab--active" : ""}`}
                 onClick={() => setShowingPreview(true)}
               >
-                Preview
+                {t(language, "results.preview")}
               </button>
               <button
                 type="button"
                 className={`preview-banner__tab ${!showingPreview ? "preview-banner__tab--active" : ""}`}
                 onClick={() => setShowingPreview(false)}
               >
-                My actual results
+                {t(language, "results.actualResults")}
               </button>
             </div>
           </div>
@@ -237,7 +243,7 @@ export default function ResultsPanel({
 
         {accounts.length > 0 && (
           <div className="active-accounts card card--pop-in">
-            <h3 className="form-section__title">Your accounts</h3>
+            <h3 className="form-section__title">{t(language, "results.yourAccounts")}</h3>
             {accounts.map((acc) => (
               <div key={acc.account_id} className="active-account-row">
                 <div className="active-account-row__main">
@@ -246,7 +252,7 @@ export default function ResultsPanel({
                     {acc.tax_wrapper.replace(/_/g, " ")} · {acc.portfolio_name}
                   </span>
                   <span className={`pill pill--${acc.status} active-account-row__status`}>
-                    {acc.status === "pending" ? "Pending review" : acc.status}
+                    {acc.status === "pending" ? t(language, "accounts.pending") : acc.status}
                   </span>
                   {acc.beneficiary_name && (
                     <span className="active-account-row__meta">Beneficiary: {acc.beneficiary_name}</span>
@@ -262,14 +268,10 @@ export default function ResultsPanel({
         )}
 
         <h3 className="form-section__title">
-          {isPreview && showingPreview ? "Products under this scenario" : "Matched products"}
+          {isPreview && showingPreview ? t(language, "results.scenarioProducts") : t(language, "results.matchedProducts")}
         </h3>
 
-        {displayedProducts.length === 0 && (
-          <p className="step-subtitle">
-            No products currently match — capital protection only, or nothing fits these amounts yet.
-          </p>
-        )}
+        {displayedProducts.length === 0 && <p className="step-subtitle">{t(language, "results.noProducts")}</p>}
 
         {visibleProducts.map((product, i) => (
           <ProductCard
@@ -278,24 +280,22 @@ export default function ResultsPanel({
             existingAccount={accountForProduct(product.id)}
             onInvest={() => investNow(product)}
             style={{ animationDelay: `${80 + i * 70}ms` }}
+            language={language}
           />
         ))}
 
         {hiddenCount > 0 && (
           <button type="button" className="btn btn-ghost show-more-btn" onClick={() => setShowAllProducts(true)}>
-            Show {hiddenCount} more
+            {t(language, "results.showMore")} ({hiddenCount})
           </button>
         )}
         {showAllProducts && displayedProducts.length > INITIAL_VISIBLE_PRODUCTS && (
           <button type="button" className="btn btn-ghost show-more-btn" onClick={() => setShowAllProducts(false)}>
-            Show less
+            {t(language, "results.showLess")}
           </button>
         )}
 
-        <p className="projection-disclaimer">
-          Projections use illustrative return assumptions and are not guaranteed —
-          actual investment performance will vary.
-        </p>
+        <p className="projection-disclaimer">{t(language, "results.disclaimer")}</p>
       </div>
 
       {applicationTarget && (

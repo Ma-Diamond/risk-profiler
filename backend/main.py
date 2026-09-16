@@ -599,6 +599,32 @@ def seed_status() -> dict:
     }
 
 
+@app.get("/admin/product-specs-status")
+def product_specs_status() -> dict:
+    """Diagnostic for "chat isn't using the product JSON files": shows,
+    for every product in the live catalog, whether it has a matching
+    spec file loaded. A product with has_spec_file=false either has no
+    matching data/<key>.json, has a key that doesn't match the file's
+    own product_id, or the catalog's own `key` field is missing/blank
+    (usually meaning Products hasn't been reseeded since that field
+    was added — delete the Products table's contents and let it
+    reseed, same as for Portfolios)."""
+    available_keys = set(product_specs.available_product_keys())
+    products = _load_all_products()
+    return {
+        "spec_files_found": sorted(available_keys),
+        "products_in_catalog": [
+            {
+                "product_id": int(p["product_id"]),
+                "name": p["name"],
+                "key": p.get("key") or None,
+                "has_spec_file": bool(p.get("key")) and p["key"] in available_keys,
+            }
+            for p in products
+        ],
+    }
+
+
 # ---------------------------------------------------------------------
 # Core finalize logic
 # ---------------------------------------------------------------------
@@ -921,6 +947,34 @@ def start_chat(
     _put_message(session_id, "assistant", json.dumps(opening))
 
     return ChatStartOut(session_id=session_id, reply=opening)
+
+
+class SessionLanguageIn(BaseModel):
+    language: str
+
+
+@app.put("/chat/sessions/{session_id}/language")
+def update_session_language(
+    session_id: int, payload: SessionLanguageIn, user_id: str | None = Depends(get_optional_user_id)
+) -> dict:
+    """Changes the language a session's AI replies are written in, from
+    the NEXT turn onward — existing history isn't retranslated (nor
+    could it be, cheaply and correctly). Backs the header's global
+    language switch: changing it mid-conversation shouldn't force
+    restarting the chat to take effect."""
+    if payload.language not in ai_chat.LANGUAGE_NAMES:
+        raise HTTPException(status_code=422, detail=f"Unsupported language: {payload.language}")
+    item = db.CHAT_SESSIONS.get_item(Key={"session_id": session_id}).get("Item")
+    if item is None:
+        raise HTTPException(status_code=404, detail="chat session not found")
+    _check_session_access(item.get("user_id"), user_id)
+    db.CHAT_SESSIONS.update_item(
+        Key={"session_id": session_id},
+        UpdateExpression="SET #lang = :l, updated_at = :ua",
+        ExpressionAttributeNames={"#lang": "language"},
+        ExpressionAttributeValues={":l": payload.language, ":ua": _now_iso()},
+    )
+    return {"status": "updated", "language": payload.language}
 
 
 def _put_message(session_id: int, role: str, content_json: str) -> None:

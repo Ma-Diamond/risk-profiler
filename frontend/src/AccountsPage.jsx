@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "./i18n";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -19,7 +20,7 @@ const LINKED_ACCOUNT_ICONS = {
 // redoing a profile creates a new one but past accounts stay real.
 // Also shows their other linked banking relationships (demo values)
 // so the app has something concrete to reference in conversation.
-export default function AccountsPage({ authToken, onBack }) {
+export default function AccountsPage({ authToken, onBack, language }) {
   const [accounts, setAccounts] = useState(null);
   const [linked, setLinked] = useState(null);
   const [error, setError] = useState(null);
@@ -44,9 +45,9 @@ export default function AccountsPage({ authToken, onBack }) {
     <div className="history-shell">
       <div className="history-card card accounts-page-card">
         <div className="history-card__header">
-          <h2>My accounts</h2>
+          <h2>{t(language, "accounts.title")}</h2>
           <button className="btn btn-ghost" onClick={onBack}>
-            Back
+            {t(language, "accounts.back")}
           </button>
         </div>
 
@@ -54,7 +55,7 @@ export default function AccountsPage({ authToken, onBack }) {
 
         {linked && linked.length > 0 && (
           <>
-            <p className="form-section__title">Your linked accounts</p>
+            <p className="form-section__title">{t(language, "accounts.linkedAccounts")}</p>
             <div className="linked-accounts-grid">
               {linked.map((acc) => (
                 <div key={acc.account_type} className="linked-account-card">
@@ -72,14 +73,12 @@ export default function AccountsPage({ authToken, onBack }) {
           </>
         )}
 
-        <p className="form-section__title">Your investment accounts</p>
+        <p className="form-section__title">{t(language, "accounts.investmentAccounts")}</p>
 
-        {accounts === null && !error && <p className="step-subtitle">Loading…</p>}
+        {accounts === null && !error && <p className="step-subtitle">{t(language, "common.loading")}</p>}
 
         {accounts && accounts.length === 0 && (
-          <p className="step-subtitle">
-            No investment accounts yet — complete a risk profile and use Invest Now to open your first one.
-          </p>
+          <p className="step-subtitle">{t(language, "accounts.noInvestmentAccounts")}</p>
         )}
 
         {accounts && accounts.length > 0 && (
@@ -87,7 +86,7 @@ export default function AccountsPage({ authToken, onBack }) {
             {accounts.map((acc) => (
               <div key={acc.account_id} className="history-row accounts-page__row">
                 <span className={`pill pill--${acc.status}`}>
-                  {acc.status === "pending" ? "Pending review" : acc.status}
+                  {acc.status === "pending" ? t(language, "accounts.pending") : acc.status}
                 </span>
                 <div className="history-row__main">
                   <strong>{acc.product_name}</strong>

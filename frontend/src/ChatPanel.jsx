@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import RiskRatingWidget from "./RiskRatingWidget";
+import { t } from "./i18n";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -7,7 +8,7 @@ const SpeechRecognitionAPI =
   typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 
 const ChatPanel = forwardRef(function ChatPanel(
-  { sessionId, setSessionId, authToken, onFinalized, onRecalculated, onSummary, hasResults },
+  { sessionId, setSessionId, authToken, onFinalized, onRecalculated, onSummary, hasResults, language },
   ref
 ) {
   const [messages, setMessages] = useState([]);
@@ -34,7 +35,8 @@ const ChatPanel = forwardRef(function ChatPanel(
       try {
         const res = await fetch(`${API_BASE}/chat/sessions`, {
           method: "POST",
-          headers: authHeaders(),
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ language: language || "en" }),
         });
         const data = await res.json();
         setSessionId(data.session_id);
@@ -74,10 +76,10 @@ const ChatPanel = forwardRef(function ChatPanel(
   useEffect(() => {
     if (!hasResults || !sessionId || autoNudgeFiredRef.current) return;
     autoNudgeFiredRef.current = true;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       sendRawRef.current?.("It's the end of the month — can you check if I have any spare cash to invest?", undefined, true);
     }, 2500);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [hasResults, sessionId]);
 
   const sendRawRef = useRef(null);
@@ -278,7 +280,8 @@ const ChatPanel = forwardRef(function ChatPanel(
         try {
           const res = await fetch(`${API_BASE}/chat/sessions`, {
             method: "POST",
-            headers: authHeaders(),
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify({ language: language || "en" }),
           });
           const data = await res.json();
           setSessionId(data.session_id);
@@ -453,7 +456,11 @@ const ChatPanel = forwardRef(function ChatPanel(
           rows={1}
           className="text-input chat-panel__input"
           placeholder={
-            voiceMode ? "Listening…" : hasResults ? "Ask a question, e.g. what if I invest more?" : "Type your answer…"
+            voiceMode
+              ? t(language, "chat.listening")
+              : hasResults
+              ? t(language, "chat.placeholderResults")
+              : t(language, "chat.placeholderIntake")
           }
           value={input}
           disabled={!sessionId || sending}
@@ -466,7 +473,7 @@ const ChatPanel = forwardRef(function ChatPanel(
           }}
         />
         <button className="btn btn-primary" onClick={sendMessage} disabled={!sessionId || sending}>
-          Send
+          {t(language, "chat.send")}
         </button>
       </div>
     </div>

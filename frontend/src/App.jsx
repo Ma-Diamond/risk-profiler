@@ -10,6 +10,8 @@ import AccountsPage from "./AccountsPage";
 import NavMenu from "./NavMenu";
 import ShieldMark from "./ShieldMark";
 import AdvisorButton from "./AdvisorButton";
+import LanguagePicker from "./LanguagePicker";
+import { t } from "./i18n";
 import "./tokens.css";
 import "./global.css";
 import "./layout.css";
@@ -17,6 +19,7 @@ import "./animations.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const TOKEN_STORAGE_KEY = "risk_profiler_token";
+const LANGUAGE_STORAGE_KEY = "risk_profiler_language";
 
 export default function App() {
   const [sessionId, setSessionId] = useState(null);
@@ -38,6 +41,25 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [savedProfile, setSavedProfile] = useState(null);
+  const [language, setLanguage] = useState(() => localStorage.getItem(LANGUAGE_STORAGE_KEY) || "en");
+
+  const handleLanguageChange = (newLanguage) => {
+    setLanguage(newLanguage);
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, newLanguage);
+    // If a chat session is already running, update its language on the
+    // backend too — future replies switch language from here on,
+    // without needing to restart the conversation. New sessions pick
+    // up the language directly at creation instead.
+    if (sessionId) {
+      fetch(`${API_BASE}/chat/sessions/${sessionId}/language`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+        body: JSON.stringify({ language: newLanguage }),
+      }).catch(() => {
+        // Best-effort — the UI language still switches either way.
+      });
+    }
+  };
 
   const fetchSavedProfile = async (token) => {
     try {
@@ -164,7 +186,7 @@ export default function App() {
   // before the chat itself ever starts, so the very first session is
   // created with the right language rather than defaulting to English
   // and switching mid-conversation.
-  const handleLandingStart = (text, language) => {
+  const handleLandingStart = (text) => {
     if (result !== null) {
       setResult(null);
       setRecalculatedProducts(null);
@@ -189,9 +211,10 @@ export default function App() {
           <span className="app-header__name">Standard Bank</span>
         </button>
         <div className="app-header__right">
-          <span className="app-header__product">AI Financial Guide</span>
-          <AdvisorButton />
-          <NavMenu currentUser={currentUser} onNavigate={setView} onLogout={handleLogout} />
+          <span className="app-header__product">{t(language, "header.product")}</span>
+          <LanguagePicker language={language} onChange={handleLanguageChange} />
+          <AdvisorButton language={language} />
+          <NavMenu currentUser={currentUser} onNavigate={setView} onLogout={handleLogout} language={language} />
         </div>
       </header>
 
@@ -209,6 +232,7 @@ export default function App() {
               authToken={authToken}
               savedProfile={savedProfile}
               onAccountOpened={handleAccountOpened}
+              language={language}
             />
           </main>
         )}
@@ -221,7 +245,7 @@ export default function App() {
               onClick={() => setSheetExpanded((e) => !e)}
             >
               <span className="chat-dock__toggle-icon">💬</span>
-              {sheetExpanded ? "Hide chat" : "Ask about your results"}
+              {sheetExpanded ? t(language, "chat.hideChat") : t(language, "chat.askAboutResults")}
             </button>
           )}
           <div className="chat-area__body">
@@ -234,12 +258,13 @@ export default function App() {
               onRecalculated={handleRecalculated}
               onSummary={setActiveSummary}
               hasResults={hasResults}
+              language={language}
             />
           </div>
         </aside>
       </div>
 
-      {view === "home" && <LandingPage onStart={handleLandingStart} />}
+      {view === "home" && <LandingPage onStart={handleLandingStart} language={language} />}
 
       {view === "account" && (
         <AccountPage
@@ -247,11 +272,12 @@ export default function App() {
           onBack={() => setView("home")}
           onLogout={handleLogout}
           onGoToLogin={() => setView("login")}
+          language={language}
         />
       )}
 
       {view === "accounts" && (
-        <AccountsPage authToken={authToken} onBack={() => setView("home")} />
+        <AccountsPage authToken={authToken} onBack={() => setView("home")} language={language} />
       )}
 
       {view === "login" && (

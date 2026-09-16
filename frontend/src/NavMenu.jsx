@@ -1,15 +1,16 @@
 import { useState } from "react";
 import ShieldMark from "./ShieldMark";
+import { t } from "./i18n";
 
-const ITEMS = [
-  { view: "home", label: "Home", icon: "🏠" },
-  { view: "history", label: "My Profiles", icon: "📋", requiresAuth: true },
-  { view: "accounts", label: "My Accounts", icon: "💼", requiresAuth: true },
-  { view: "account", label: "Profile settings", icon: "⚙️" },
-];
-
-export default function NavMenu({ currentUser, onNavigate, onLogout }) {
+export default function NavMenu({ currentUser, onNavigate, onLogout, language }) {
   const [open, setOpen] = useState(false);
+
+  const ITEMS = [
+    { view: "home", label: t(language, "nav.home"), icon: "🏠" },
+    { view: "history", label: t(language, "nav.profiles"), icon: "📋", requiresAuth: true },
+    { view: "accounts", label: t(language, "nav.accounts"), icon: "💼", requiresAuth: true },
+    { view: "account", label: t(language, "nav.settings"), icon: "⚙️" },
+  ];
 
   const go = (view) => {
     setOpen(false);
@@ -67,12 +68,12 @@ export default function NavMenu({ currentUser, onNavigate, onLogout }) {
                   }}
                 >
                   <span className="nav-menu__item-icon">🚪</span>
-                  Log out
+                  {t(language, "nav.logout")}
                 </button>
               ) : (
                 <button className="nav-menu__item nav-menu__item--primary" onClick={() => go("login")}>
                   <span className="nav-menu__item-icon">🔑</span>
-                  Log in
+                  {t(language, "nav.login")}
                 </button>
               )}
             </div>

@@ -27,7 +27,15 @@ _MAX_ABOUT_CHARS = 800  # keeps the AI-context version bounded; the raw file its
 def _load_all_specs() -> dict[str, dict]:
     """product_key -> parsed JSON, for every *.json file in data/ whose
     top-level product_id matches its own filename stem (a light sanity
-    check against a stray unrelated JSON file ending up in data/)."""
+    check against a stray unrelated JSON file ending up in data/).
+
+    Deliberately NOT cached at module level: it used to be, but that
+    meant a spec file added or fixed after a worker process started
+    stayed invisible until every worker restarted, with no visible
+    error — just the chat quietly not knowing about a product until
+    someone thought to redeploy again. Re-reading a handful of small
+    JSON files per call is cheap enough at this scale that correctness
+    wins over the micro-optimization."""
     specs: dict[str, dict] = {}
     if not DATA_DIR.exists():
         return specs
@@ -43,14 +51,20 @@ def _load_all_specs() -> dict[str, dict]:
     return specs
 
 
-_SPECS = _load_all_specs()
+def available_product_keys() -> list[str]:
+    """Every product_key currently loadable from a spec file — exposed
+    via /admin/product-specs-status so a mismatch (a product in the
+    catalog with no matching spec, or a spec file that isn't being
+    picked up) is something you can check directly instead of
+    guessing from chat behavior."""
+    return sorted(_load_all_specs().keys())
 
 
 def learn_more(product_key: str) -> dict | None:
     """Curated fields for a frontend 'Learn more' panel — about,
     a handful of key features, a handful of FAQs. Returns None if no
     spec file exists for this product_key."""
-    spec = _SPECS.get(product_key)
+    spec = _load_all_specs().get(product_key)
     if spec is None:
         return None
 
@@ -79,7 +93,7 @@ def context_blurb(product_key: str) -> str | None:
     prompt — enough for it to answer detailed questions about this
     product accurately, small enough not to bloat every turn's token
     usage. None if no spec exists."""
-    spec = _SPECS.get(product_key)
+    spec = _load_all_specs().get(product_key)
     if spec is None:
         return None
 

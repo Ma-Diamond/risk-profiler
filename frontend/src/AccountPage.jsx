@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "./i18n";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -41,7 +42,7 @@ const FIELD_GROUPS = [
 
 // These fields feed both the chat intake and the Invest Now form, so
 // filling them in here means neither has to start from scratch.
-export default function AccountPage({ currentUser, onBack, onLogout, onGoToLogin }) {
+export default function AccountPage({ currentUser, onBack, onLogout, onGoToLogin, language }) {
   const [profile, setProfile] = useState({});
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -88,14 +89,14 @@ export default function AccountPage({ currentUser, onBack, onLogout, onGoToLogin
       <div className="history-shell">
         <div className="history-card card">
           <div className="history-card__header">
-            <h2>My account</h2>
+            <h2>{t(language, "accounts.title")}</h2>
             <button className="btn btn-ghost" onClick={onBack}>
-              Back
+              {t(language, "accounts.back")}
             </button>
           </div>
           <p className="step-subtitle">You're not logged in.</p>
           <button className="btn btn-primary" onClick={onGoToLogin}>
-            Log in
+            {t(language, "nav.login")}
           </button>
         </div>
       </div>
@@ -106,9 +107,9 @@ export default function AccountPage({ currentUser, onBack, onLogout, onGoToLogin
     <div className="history-shell">
       <div className="history-card card profile-card">
         <div className="history-card__header">
-          <h2>My profile</h2>
+          <h2>{t(language, "profile.title")}</h2>
           <button className="btn btn-ghost" onClick={onBack}>
-            Back
+            {t(language, "accounts.back")}
           </button>
         </div>
         <p className="step-subtitle">
@@ -162,19 +163,19 @@ export default function AccountPage({ currentUser, onBack, onLogout, onGoToLogin
           {editing ? (
             <>
               <button className="btn btn-ghost" onClick={() => setEditing(false)} disabled={saving}>
-                Cancel
+                {t(language, "profile.cancel")}
               </button>
               <button className="btn btn-primary" onClick={save} disabled={saving}>
-                {saving ? "Saving…" : "Save"}
+                {saving ? "…" : t(language, "profile.save")}
               </button>
             </>
           ) : (
             <>
               <button className="btn btn-ghost" onClick={onLogout}>
-                Log out
+                {t(language, "profile.logout")}
               </button>
               <button className="btn btn-primary" onClick={() => setEditing(true)}>
-                Edit profile
+                {t(language, "profile.edit")}
               </button>
             </>
           )}
